@@ -3,7 +3,7 @@
  * Provides HTTP client for communicating with the backend API
  */
 
-const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = (import.meta as any).env.VITE_API_URL || 'https://drdavinci-backend.vercel.app/api';
 
 export interface ApiResponse<T> {
   data?: T;

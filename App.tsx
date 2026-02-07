@@ -9,7 +9,7 @@ import AuthView from './components/AuthView';
 import SearchConsultations from './components/SearchConsultations';
 import { SYSTEM_INSTRUCTION } from './constants';
 import { extractSymptoms } from './services/nlpService';
-import { matchLocalDiseases } from './services/inferenceService';
+import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence } from './services/inferenceService';
 import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
@@ -361,7 +361,18 @@ const App: React.FC = () => {
       }
 
       const foundSymptomIds = extractSymptoms(userText);
-      const results = matchLocalDiseases(foundSymptomIds);
+      let results = matchLocalDiseases(foundSymptomIds);
+
+      // Blend AI confidence with local scores
+      const aiConfidence = extractAIConfidence(botContent);
+      if (results.length > 0) {
+        results = results.map(result => ({
+          ...result,
+          score: blendScoresWithAI(result.score, aiConfidence, 0.4)
+        }));
+        // Re-sort by blended score
+        results.sort((a, b) => b.score - a.score);
+      }
 
       setActiveSession(prev => {
         if (!prev) return null;

@@ -1,0 +1,8 @@
+{
+  "name": "Dr. Davinci Symptom Analyzer",
+  "description": "A sophisticated symptom-analysis decision-support tool that extracts clinical entities from natural language and provides probabilistic disease education.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -38,7 +38,7 @@ const VerdictCard: React.FC<VerdictCardProps> = ({ verdicts }) => {
       </div>
 
       <div className="space-y-3">
-        {verdicts.map((verdict, index) => (
+        {verdicts.slice(0, 2).map((verdict, index) => (
           <div
             key={index}
             className={`relative overflow-hidden rounded-xl p-4 border-2 transition-all duration-300 ${
@@ -99,6 +99,20 @@ const VerdictCard: React.FC<VerdictCardProps> = ({ verdicts }) => {
               }`}>
                 {verdict.reasoning}
               </p>
+
+              {/* Sources */}
+              {verdict.sources && verdict.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">📚 Evidence</p>
+                  <div className="space-y-1">
+                    {verdict.sources.map((source, srcIdx) => (
+                      <p key={srcIdx} className="text-[9px] text-slate-600">
+                        {source}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Top Indicator Bar */}

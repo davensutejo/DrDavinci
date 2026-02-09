@@ -84,6 +84,21 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
     v.rank = index + 1;
   });
   
+  // Extract sources from [1] Organization - Description format
+  const sourcesPattern = /\[(\d+)\]\s*([A-Za-z\s&]+?)\s*-\s*([^\n]+)/g;
+  const sources: string[] = [];
+  let sourceMatch;
+  while ((sourceMatch = sourcesPattern.exec(responseText)) !== null) {
+    sources.push(`[${sourceMatch[1]}] ${sourceMatch[2].trim()} - ${sourceMatch[3].trim()}`);
+  }
+  
+  // Attach sources to all verdicts
+  if (sources.length > 0) {
+    verdicts.forEach(v => {
+      v.sources = sources;
+    });
+  }
+  
   // Return only top 2 verdicts - ignore the rest
   return verdicts.slice(0, 2);
 };

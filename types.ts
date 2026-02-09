@@ -35,6 +35,7 @@ export interface VerdictDiagnosis {
   confidence: number; // 0-100
   reasoning: string;
   rank: number; // 1 = most likely
+  sources?: string[]; // Citations like "[1] WHO - ..."
 }
 
 export interface ConversationState {

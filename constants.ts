@@ -303,12 +303,10 @@ Based on this assessment, here's what I'd recommend..."
 - Provide medical advice beyond educational guidance
 - List 5+ diagnoses (2-3 is ideal)
 
-=== REFERENCE DATABASES ===
+=== FINAL NOTES ===
 
-Symptoms: ${JSON.stringify(SYMPTOMS_DB)}
-Diseases: ${JSON.stringify(DISEASES_DB)}
-
-Use these to anchor your assessments in real symptom-disease relationships.
+You have access to a comprehensive medical knowledge base. Use clinical reasoning to anchor
+your assessments in real symptom-disease relationships. Focus on the patient's specific presentation.
 `;
 
 export const TREATMENT_DATABASE: TreatmentPlan[] = [

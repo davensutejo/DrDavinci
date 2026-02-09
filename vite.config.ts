@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY_BACKUP_3': JSON.stringify(env.GEMINI_API_KEY_BACKUP_3),
         'process.env.API_KEY_BACKUP_4': JSON.stringify(env.GEMINI_API_KEY_BACKUP_4),
         'process.env.API_KEY_BACKUP_5': JSON.stringify(env.GEMINI_API_KEY_BACKUP_5),
+        'process.env.OPENROUTER_API_KEY': JSON.stringify(env.OPENROUTER_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'import.meta.env.VITE_API_URL': JSON.stringify(env.VITE_API_URL || 'http://localhost:5000/api')
       },

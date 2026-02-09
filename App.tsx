@@ -85,8 +85,8 @@ const App: React.FC = () => {
   const finalTranscriptRef = useRef<string>(''); // Track final transcript to avoid duplicates
   const lastProcessedIndexRef = useRef<number>(0); // Track last processed result index
   
-  // API Key rotation system - 6 keys total (1 primary + 5 backups)
-  const API_KEYS = [
+  // API Key rotation system - 6 Gemini keys + OpenRouter fallback
+  const GEMINI_API_KEYS = [
     process.env.API_KEY,
     process.env.API_KEY_BACKUP,
     process.env.API_KEY_BACKUP_2,
@@ -95,8 +95,9 @@ const App: React.FC = () => {
     process.env.API_KEY_BACKUP_5,
   ].filter(Boolean) as string[];
   
-  const currentApiKeyIndexRef = useRef<number>(0); // Track which key we're using
-  const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted keys
+  const currentApiKeyIndexRef = useRef<number>(0); // Track which Gemini key we're using
+  const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted Gemini keys
+  const useOpenRouterRef = useRef<boolean>(false); // Track if using OpenRouter fallback
 
   // Sync session list on load or user change
   const refreshSessions = useCallback(async () => {
@@ -112,22 +113,60 @@ const App: React.FC = () => {
     return [];
   }, [currentUser]);
 
-  // Get next available API key (rotate through all 6)
-  const getNextApiKey = useCallback((): [string, number] => {
+  // Get next available API key (rotate through all 6 Gemini keys)
+  const getNextApiKey = useCallback((): [string, number, boolean] => {
     // Find next key that hasn't been exhausted
-    for (let i = 0; i < API_KEYS.length; i++) {
-      const nextIndex = (currentApiKeyIndexRef.current + i) % API_KEYS.length;
+    for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
+      const nextIndex = (currentApiKeyIndexRef.current + i) % GEMINI_API_KEYS.length;
       if (!exhaustedKeysRef.current.has(nextIndex)) {
         currentApiKeyIndexRef.current = nextIndex;
-        return [API_KEYS[nextIndex], nextIndex + 1];
+        return [GEMINI_API_KEYS[nextIndex], nextIndex + 1, false];
       }
     }
     
-    // If all keys exhausted, reset and start from the beginning (with warning)
+    // All Gemini keys exhausted, try OpenRouter
+    if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
+      useOpenRouterRef.current = true;
+      return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
+    }
+    
+    // If all exhausted, reset and start from beginning
     exhaustedKeysRef.current.clear();
+    useOpenRouterRef.current = false;
     currentApiKeyIndexRef.current = 0;
-    return [API_KEYS[0], 1];
-  }, [API_KEYS]);
+    return [GEMINI_API_KEYS[0], 1, false];
+  }, [GEMINI_API_KEYS]);
+
+  // Send message via OpenRouter (OpenAI-compatible API)
+  const sendViaOpenRouter = useCallback(async (userMessage: string, systemInstruction: string) => {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error('OpenRouter API key not configured');
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'X-Title': 'Dr-Davinci-Medical',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-preview-09-2025',
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.5,
+        stream: true,
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(JSON.stringify(error));
+    }
+
+    return response;
+  }, []);
 
   // Handle New Chat creation
   const startNewChat = useCallback(() => {
@@ -156,29 +195,34 @@ const App: React.FC = () => {
   // Initialize Chat Engine when session changes
   useEffect(() => {
     if (currentUser && activeSession && activeSession.id !== 'new') {
-      const [apiKey, keyNumber] = getNextApiKey();
+      const [apiKey, keyNumber, isOpenRouter] = getNextApiKey();
       if (!apiKey) {
         setConfigError("No API keys available. Please configure at least one GEMINI_API_KEY.");
         return;
       }
 
       try {
-        console.log(`🔑 Initializing with API Key #${keyNumber}/${API_KEYS.length}`);
-        const ai = new GoogleGenAI({ apiKey });
-        chatRef.current = ai.chats.create({
-          model: 'gemini-2.5-flash',
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION,
-            temperature: 0.5,
-            tools: [{ googleSearch: {} }]
-          },
-        });
+        if (!isOpenRouter) {
+          console.log(`🔑 Initializing with Google Gemini Key #${keyNumber}/${GEMINI_API_KEYS.length}`);
+          const ai = new GoogleGenAI({ apiKey });
+          chatRef.current = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+              systemInstruction: SYSTEM_INSTRUCTION,
+              temperature: 0.5,
+              tools: [{ googleSearch: {} }]
+            },
+          });
+        } else {
+          console.log(`🔄 Switching to OpenRouter (Gemini 2.5 Flash Preview)`);
+          chatRef.current = null; // Will use OpenRouter
+        }
       } catch (err: any) {
         console.error("Failed to initialize AI:", err);
         setConfigError(`Failed to initialize medical engine: ${err?.message || err?.toString() || 'Unknown error'}`);
       }
     }
-  }, [activeSession?.id, currentUser, getNextApiKey, API_KEYS.length]);
+  }, [activeSession?.id, currentUser, getNextApiKey, GEMINI_API_KEYS.length]);
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -314,18 +358,23 @@ const App: React.FC = () => {
   const handleSend = useCallback(async () => {
     if ((!input.trim() && !selectedImage) || !currentUser || !activeSession) return;
     
-    if (!chatRef.current) {
-      const [apiKey, keyNumber] = getNextApiKey();
+    if (!chatRef.current && !useOpenRouterRef.current) {
+      const [apiKey, keyNumber, isOpenRouter] = getNextApiKey();
       if (!apiKey) {
         setConfigError("No API keys available. Please configure at least one GEMINI_API_KEY.");
         return;
       }
-      console.log(`🔑 Initializing with API Key #${keyNumber}/${API_KEYS.length}`);
-      const ai = new GoogleGenAI({ apiKey });
-      chatRef.current = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.5, tools: [{ googleSearch: {} }] },
-      });
+      
+      if (!isOpenRouter) {
+        console.log(`🔑 Initializing with Google Gemini Key #${keyNumber}/${GEMINI_API_KEYS.length}`);
+        const ai = new GoogleGenAI({ apiKey });
+        chatRef.current = ai.chats.create({
+          model: 'gemini-2.5-flash',
+          config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.5, tools: [{ googleSearch: {} }] },
+        });
+      } else {
+        console.log(`🔄 Switching to OpenRouter (Gemini 2.5 Flash Preview)`);
+      }
     }
 
     const userText = input.trim();
@@ -356,8 +405,6 @@ const App: React.FC = () => {
           }
         : { message: userText };
 
-      const responseStream = await chatRef.current!.sendMessageStream(messageContent);
-      
       let botContent = "";
       const botMsgId = (Date.now() + 1).toString();
       let lastResponse: GenerateContentResponse | null = null;
@@ -370,26 +417,71 @@ const App: React.FC = () => {
         };
       });
 
-      for await (const chunk of responseStream) {
-        const resp = chunk as GenerateContentResponse;
-        lastResponse = resp;
-        botContent += resp.text || "";
-        setActiveSession(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
-          };
-        });
+      // Route to appropriate API
+      if (useOpenRouterRef.current) {
+        // Use OpenRouter
+        const response = await sendViaOpenRouter(userText, SYSTEM_INSTRUCTION);
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+              
+              try {
+                const json = JSON.parse(data);
+                const content = json.choices?.[0]?.delta?.content || '';
+                if (content) {
+                  botContent += content;
+                  setActiveSession(prev => {
+                    if (!prev) return null;
+                    return {
+                      ...prev,
+                      messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+                    };
+                  });
+                }
+              } catch (e) {
+                // Skip parsing errors
+              }
+            }
+          }
+        }
+      } else {
+        // Use Google Gemini
+        const responseStream = await chatRef.current!.sendMessageStream(messageContent);
+        
+        for await (const chunk of responseStream) {
+          const resp = chunk as GenerateContentResponse;
+          lastResponse = resp;
+          botContent += resp.text || "";
+          setActiveSession(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+            };
+          });
+        }
       }
 
       // Final processing (Grounding & Local Results)
       const groundingSources: GroundingSource[] = [];
-      const metadata = lastResponse?.candidates?.[0]?.groundingMetadata;
-      if (metadata?.groundingChunks) {
-        metadata.groundingChunks.forEach((chunk: any) => {
-          if (chunk.web) groundingSources.push({ title: chunk.web.title, uri: chunk.web.uri });
-        });
+      if (!useOpenRouterRef.current) {
+        const metadata = lastResponse?.candidates?.[0]?.groundingMetadata;
+        if (metadata?.groundingChunks) {
+          metadata.groundingChunks.forEach((chunk: any) => {
+            if (chunk.web) groundingSources.push({ title: chunk.web.title, uri: chunk.web.uri });
+          });
+        }
       }
 
       const foundSymptomIds = extractSymptoms(userText);
@@ -447,15 +539,24 @@ const App: React.FC = () => {
                          errorMessage.includes('RESOURCE_EXHAUSTED') ||
                          errorMessage.includes('exceeded');
       
-      if (isRateLimit) {
+      if (isRateLimit && !useOpenRouterRef.current) {
         // Mark current key as exhausted
         const keyIndex = currentApiKeyIndexRef.current;
         exhaustedKeysRef.current.add(keyIndex);
-        const [nextKey, nextKeyNumber] = getNextApiKey();
+        const [nextKey, nextKeyNumber, isOpenRouter] = getNextApiKey();
         
-        if (nextKeyNumber !== keyIndex + 1) {
-          // We've rotated to a different key
-          console.warn(`⚠️ API Key #${keyIndex + 1} rate limited. Rotating to Key #${nextKeyNumber}/${API_KEYS.length}`);
+        if (isOpenRouter) {
+          // Switch to OpenRouter
+          console.warn(`⚠️ All ${GEMINI_API_KEYS.length} Gemini keys exhausted. Switching to OpenRouter backup...`);
+          chatRef.current = null; // Reset chat
+          
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have reached their daily quota limit. Automatically switched to OpenRouter (via your credits). Please try your request again.`, timestamp: new Date() }]
+          } : null);
+        } else if (nextKeyNumber !== keyIndex + 1) {
+          // Rotated to a different Gemini key
+          console.warn(`⚠️ Gemini Key #${keyIndex + 1} rate limited. Rotating to Key #${nextKeyNumber}/${GEMINI_API_KEYS.length}`);
           chatRef.current = null; // Reset chat to reinitialize with new key
           
           setActiveSession(prev => prev ? {
@@ -463,16 +564,20 @@ const App: React.FC = () => {
             messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Current API key hit the daily quota limit. Automatically switched to backup key #${nextKeyNumber}. Please try your request again.`, timestamp: new Date() }]
           } : null);
         } else {
-          // All keys are exhausted
-          const allExhausted = exhaustedKeysRef.current.size === API_KEYS.length;
-          if (allExhausted) {
-            console.warn('⚠️ All API keys have hit their daily quota (free tier limit: 20 requests/day)');
-            setActiveSession(prev => prev ? {
-              ...prev,
-              messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${API_KEYS.length} API keys have reached their daily quota limit (20 requests/day for free tier). Your quota will reset in 24 hours. To continue using the service without waiting, please upgrade to a paid plan at https://console.cloud.google.com`, timestamp: new Date() }]
-            } : null);
-          }
+          // All exhausted and no OpenRouter
+          console.warn('⚠️ All API providers exhausted');
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have been exhausted. Your quota will reset in 24 hours. To continue immediately, upgrade to a paid plan at https://console.cloud.google.com`, timestamp: new Date() }]
+          } : null);
         }
+      } else if (useOpenRouterRef.current) {
+        // OpenRouter error
+        console.error('OpenRouter Error:', error);
+        setActiveSession(prev => prev ? {
+          ...prev,
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Error with OpenRouter backup service: ${errorMessage}. Please check your OpenRouter API key and try again.`, timestamp: new Date() }]
+        } : null);
       } else {
         // Not a rate limit error
         setActiveSession(prev => prev ? {
@@ -483,7 +588,7 @@ const App: React.FC = () => {
     } finally {
       setIsTyping(false);
     }
-  }, [input, selectedImage, currentUser, activeSession, refreshSessions, getNextApiKey, API_KEYS.length]);
+  }, [input, selectedImage, currentUser, activeSession, refreshSessions, getNextApiKey, GEMINI_API_KEYS.length, sendViaOpenRouter]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

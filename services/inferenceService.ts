@@ -1,6 +1,6 @@
 
 import { DISEASES_DB, SYMPTOMS_DB } from '../constants';
-import { AnalysisResult, VerdictDiagnosis, Message } from '../types';
+import { AnalysisResult, VerdictDiagnosis, Message, EvidenceSource } from '../types';
 
 /**
  * Accumulates all unique symptoms reported across the entire conversation.
@@ -84,12 +84,16 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
     v.rank = index + 1;
   });
   
-  // Extract sources from [1] Organization - Description format
-  const sourcesPattern = /\[(\d+)\]\s*([A-Za-z\s&]+?)\s*-\s*([^\n]+)/g;
-  const sources: string[] = [];
+  // Extract sources from [1] Organization (https://url) - Description format
+  const sourcesPattern = /\[(\d+)\]\s*([A-Za-z\s&]+?)\s*\((https?:\/\/[^\)]+)\)\s*-\s*([^\n]+)/g;
+  const sources: EvidenceSource[] = [];
   let sourceMatch;
   while ((sourceMatch = sourcesPattern.exec(responseText)) !== null) {
-    sources.push(`[${sourceMatch[1]}] ${sourceMatch[2].trim()} - ${sourceMatch[3].trim()}`);
+    sources.push({
+      organization: sourceMatch[2].trim(),
+      url: sourceMatch[3].trim(),
+      description: sourceMatch[4].trim()
+    });
   }
   
   // Attach sources to all verdicts

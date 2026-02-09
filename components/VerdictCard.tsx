@@ -33,7 +33,7 @@ const VerdictCard: React.FC<VerdictCardProps> = ({ verdicts }) => {
     <div className="mt-6 pt-5 border-t border-slate-100">
       <div className="mb-4">
         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">
-          🔬 Clinical Verdict
+          🔬 Final Verdict
         </span>
       </div>
 
@@ -104,11 +104,21 @@ const VerdictCard: React.FC<VerdictCardProps> = ({ verdicts }) => {
               {verdict.sources && verdict.sources.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-slate-200">
                   <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2">📚 Evidence</p>
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     {verdict.sources.map((source, srcIdx) => (
-                      <p key={srcIdx} className="text-[9px] text-slate-600">
-                        {source}
-                      </p>
+                      <a 
+                        key={srcIdx}
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-2 text-[9px] text-teal-600 hover:text-teal-700 hover:underline p-1.5 bg-teal-50/50 rounded transition-colors"
+                      >
+                        <span className="flex-shrink-0 mt-0.5">🔗</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-teal-700">{source.organization}</p>
+                          <p className="text-slate-600 truncate">{source.description}</p>
+                        </div>
+                      </a>
                     ))}
                   </div>
                 </div>

@@ -30,12 +30,18 @@ export interface GroundingSource {
   uri: string;
 }
 
+export interface EvidenceSource {
+  organization: string;
+  url: string;
+  description: string;
+}
+
 export interface VerdictDiagnosis {
   disease: string;
   confidence: number; // 0-100
   reasoning: string;
   rank: number; // 1 = most likely
-  sources?: string[]; // Citations like "[1] WHO - ..."
+  sources?: EvidenceSource[]; // Citations with URLs
 }
 
 export interface ConversationState {

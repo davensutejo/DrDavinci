@@ -95,6 +95,17 @@ const App: React.FC = () => {
     process.env.API_KEY_BACKUP_5,
   ].filter(Boolean) as string[];
   
+  // Log available keys on mount for debugging
+  useEffect(() => {
+    console.log(`✅ Available API Keys: ${GEMINI_API_KEYS.length} Gemini + ${process.env.OPENROUTER_API_KEY ? '1 OpenRouter' : '0 OpenRouter'}`);
+    GEMINI_API_KEYS.forEach((key, idx) => {
+      console.log(`   Key #${idx + 1}: ${key?.substring(0, 20)}...${key?.substring(key.length - 10)}`);
+    });
+    if (process.env.OPENROUTER_API_KEY) {
+      console.log(`   OpenRouter: ${process.env.OPENROUTER_API_KEY.substring(0, 20)}...`);
+    }
+  }, []);
+  
   const currentApiKeyIndexRef = useRef<number>(0); // Track which Gemini key we're using
   const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted Gemini keys
   const useOpenRouterRef = useRef<boolean>(false); // Track if using OpenRouter fallback
@@ -124,10 +135,16 @@ const App: React.FC = () => {
       }
     }
     
-    // All Gemini keys exhausted, try OpenRouter
+    // All Gemini keys exhausted, check for OpenRouter
     if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
+      console.warn('🔄 All Gemini keys exhausted. Switching to OpenRouter fallback...');
       useOpenRouterRef.current = true;
       return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
+    }
+    
+    // If all keys exhausted, show them we tried OpenRouter
+    if (useOpenRouterRef.current && !process.env.OPENROUTER_API_KEY) {
+      console.error('❌ OpenRouter API key not configured!');
     }
     
     // If all exhausted, reset and start from beginning
@@ -547,12 +564,12 @@ const App: React.FC = () => {
         
         if (isOpenRouter) {
           // Switch to OpenRouter
-          console.warn(`⚠️ All ${GEMINI_API_KEYS.length} Gemini keys exhausted. Switching to OpenRouter backup...`);
+          console.warn(`⚠️ All ${GEMINI_API_KEYS.length} Gemini free tier keys exhausted. Attempting OpenRouter...`);
           chatRef.current = null; // Reset chat
           
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have reached their daily quota limit. Automatically switched to OpenRouter (via your credits). Please try your request again.`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have reached their daily quota. Switching to OpenRouter backup (using your credits). Please try your request again.`, timestamp: new Date() }]
           } : null);
         } else if (nextKeyNumber !== keyIndex + 1) {
           // Rotated to a different Gemini key
@@ -561,14 +578,14 @@ const App: React.FC = () => {
           
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Current API key hit the daily quota limit. Automatically switched to backup key #${nextKeyNumber}. Please try your request again.`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API Key #${keyIndex + 1} hit its daily quota. Switched to backup key #${nextKeyNumber}. Please try again.`, timestamp: new Date() }]
           } : null);
         } else {
           // All exhausted and no OpenRouter
           console.warn('⚠️ All API providers exhausted');
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have been exhausted. Your quota will reset in 24 hours. To continue immediately, upgrade to a paid plan at https://console.cloud.google.com`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier Gemini keys have been exhausted. Quota resets in 24 hours. ${process.env.OPENROUTER_API_KEY ? 'OpenRouter is configured but currently unavailable.' : 'Configure OpenRouter API key for unlimited fallback access.'}`, timestamp: new Date() }]
           } : null);
         }
       } else if (useOpenRouterRef.current) {
@@ -576,7 +593,7 @@ const App: React.FC = () => {
         console.error('OpenRouter Error:', error);
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Error with OpenRouter backup service: ${errorMessage}. Please check your OpenRouter API key and try again.`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `OpenRouter error: ${errorMessage}. Your OpenRouter credits may be exhausted. Check your account at openrouter.ai`, timestamp: new Date() }]
         } : null);
       } else {
         // Not a rate limit error

@@ -434,14 +434,27 @@ const App: React.FC = () => {
     setIsTyping(true);
 
     try {
-      let messageContent: any = currentImg 
+      let messageContent: any;
+      
+      // Count symptoms BEFORE sending to AI
+      const totalSymptomCount = countTotalUserSymptoms(updatedMessages);
+      
+      // Create a preamble that forces Gemini to make the right decision
+      const symptomCountPreamble = totalSymptomCount >= 3 
+        ? `[SYSTEM: Patient has reported ${totalSymptomCount} distinct symptoms across this conversation. YOU MUST provide a FINAL VERDICT section with confident diagnosis percentages in this response.]`
+        : `[SYSTEM: Patient has reported ${totalSymptomCount} symptoms so far. Continue asking clarifying questions. DO NOT provide FINAL VERDICT yet.]`;
+      
+      // Construct the actual user message with preamble
+      const userMessageWithContext = `${symptomCountPreamble}\n\n${userText || "Medical image attached for analysis."}`;
+      
+      messageContent = currentImg 
         ? { 
             message: [
               { inlineData: { data: currentImg.base64.split(',')[1], mimeType: currentImg.type } }, 
-              { text: userText || "Analyze this image." }
+              { text: userMessageWithContext }
             ] 
           }
-        : { message: userText };
+        : { message: userMessageWithContext };
 
       let botContent = "";
       const botMsgId = (Date.now() + 1).toString();
@@ -458,7 +471,7 @@ const App: React.FC = () => {
       // Route to appropriate API
       if (useOpenRouterRef.current) {
         // Use OpenRouter
-        const response = await sendViaOpenRouter(userText, SYSTEM_INSTRUCTION);
+        const response = await sendViaOpenRouter(userMessageWithContext, SYSTEM_INSTRUCTION);
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
         
@@ -522,24 +535,7 @@ const App: React.FC = () => {
         }
       }
 
-      // Extract and count total symptoms from entire conversation
-      const foundSymptomIds = extractSymptoms(userText);
-      const totalSymptomCount = countTotalUserSymptoms(updatedMessages);
-      
-      let results = matchLocalDiseases(foundSymptomIds);
-
-      // Blend AI confidence with local scores
-      const aiConfidence = extractAIConfidence(botContent);
-      if (results.length > 0) {
-        results = results.map(result => ({
-          ...result,
-          score: blendScoresWithAI(result.score, aiConfidence, 0.4)
-        }));
-        // Re-sort by blended score
-        results.sort((a, b) => b.score - a.score);
-      }
-
-      // Extract structured verdicts from AI response
+      // Extract verdict structures from AI response
       const verdicts = extractVerdictsFromResponse(botContent);
 
       setActiveSession(prev => {
@@ -549,10 +545,9 @@ const App: React.FC = () => {
           messages: prev.messages.map(m => 
             m.id === botMsgId ? { 
               ...m, 
-              results: results.length > 0 ? results : undefined,
-              extractedSymptoms: foundSymptomIds,
+              extractedSymptoms: userSymptomIds,
               groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
-              verdicts: verdicts.length > 0 ? verdicts : undefined  // Only set if verdicts were extracted
+              verdicts: verdicts.length > 0 ? verdicts : undefined
             } : m
           )
         };
@@ -763,7 +758,7 @@ const App: React.FC = () => {
                     {msg.verdicts && msg.verdicts.length > 0 && (
                       <VerdictCard verdicts={msg.verdicts} />
                     )}
-                    {(!msg.verdicts || msg.verdicts.length === 0) && msg.results && (
+                    {(!msg.verdicts || msg.verdicts.length === 0) && msg.results && msg.extractedSymptoms && msg.extractedSymptoms.length >= 3 && (
                       <div className="mt-6 pt-5 border-t border-slate-100">
                         <DiagnosisResult results={msg.results} />
                       </div>

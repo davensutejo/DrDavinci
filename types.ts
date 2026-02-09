@@ -30,6 +30,20 @@ export interface GroundingSource {
   uri: string;
 }
 
+export interface VerdictDiagnosis {
+  disease: string;
+  confidence: number; // 0-100
+  reasoning: string;
+  rank: number; // 1 = most likely
+}
+
+export interface ConversationState {
+  questionCount: number;
+  maxQuestions: number;
+  symptomHistory: string[];
+  diagnosticPhase: 'initial' | 'narrowing' | 'final';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'bot';
@@ -39,6 +53,8 @@ export interface Message {
   results?: AnalysisResult[];
   extractedSymptoms?: string[];
   groundingSources?: GroundingSource[];
+  conversationState?: ConversationState;
+  verdicts?: VerdictDiagnosis[];
 }
 
 export interface ChatSession {

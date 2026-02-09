@@ -1,6 +1,107 @@
 
 import { DISEASES_DB, SYMPTOMS_DB } from '../constants';
-import { AnalysisResult } from '../types';
+import { AnalysisResult, VerdictDiagnosis } from '../types';
+
+/**
+ * Parses AI response to extract structured verdicts with confidence scores.
+ * Looks for pattern: "Disease Name: XX% confidence - reasoning"
+ * 
+ * @param responseText - The AI response text
+ * @returns Array of parsed verdicts with confidence scores
+ */
+export const extractVerdictsFromResponse = (responseText: string): VerdictDiagnosis[] => {
+  const verdicts: VerdictDiagnosis[] = [];
+  
+  // Pattern: "- Disease Name: X% confidence - reasoning"
+  const verdictPattern = /(?:^|\n)\s*-?\s*([^:]+):\s*(\d+)%\s*confidence\s*(?:-\s*(.+?))?(?=\n|$)/gi;
+  let match;
+  
+  let rank = 1;
+  while ((match = verdictPattern.exec(responseText)) !== null) {
+    const disease = match[1].trim();
+    const confidence = parseInt(match[2], 10);
+    const reasoning = match[3]?.trim() || 'See clinical analysis';
+    
+    // Validate confidence is in range
+    if (confidence >= 0 && confidence <= 100 && disease.length > 0) {
+      verdicts.push({
+        disease,
+        confidence,
+        reasoning,
+        rank: rank++
+      });
+    }
+  }
+  
+  // If no structured verdicts found, return empty array for fallback handling
+  return verdicts;
+};
+
+/**
+ * Calculates confidence score based on symptom matching against disease database.
+ * Uses Bayesian-inspired scoring combining sensitivity and specificity.
+ * 
+ * @param disease - Disease name to match
+ * @param foundSymptomIds - Array of detected symptom IDs
+ * @returns Confidence score 0-100
+ */
+export const calculateDiseaseConfidence = (disease: string, foundSymptomIds: string[]): number => {
+  if (foundSymptomIds.length === 0) return 25; // No symptoms = very low confidence
+  
+  const diseaseRecord = DISEASES_DB.find(d => d.name.toLowerCase() === disease.toLowerCase());
+  if (!diseaseRecord) return 20; // Unknown disease = very low confidence
+  
+  const matchedSymptoms = diseaseRecord.symptoms.filter(s => foundSymptomIds.includes(s));
+  const matchCount = matchedSymptoms.length;
+  const totalDiseaseSymptoms = diseaseRecord.symptoms.length;
+  
+  // Sensitivity: What percentage of disease symptoms are present?
+  const sensitivity = totalDiseaseSymptoms > 0 ? matchCount / totalDiseaseSymptoms : 0;
+  
+  // Specificity: What percentage of user symptoms match this disease?
+  const specificity = foundSymptomIds.length > 0 ? matchCount / foundSymptomIds.length : 0;
+  
+  // Combined score: 70% sensitivity, 30% specificity
+  const baseScore = (sensitivity * 0.7 + specificity * 0.3);
+  
+  // Convert to 0-100 scale
+  let confidencePercent = Math.round(baseScore * 100);
+  
+  // Adjust for symptom coverage
+  // If we have many symptoms and most match, increase confidence
+  if (matchCount >= 3 && sensitivity > 0.6) {
+    confidencePercent = Math.min(100, confidencePercent + 10);
+  }
+  
+  // If we have few symptoms and partial match, reduce confidence
+  if (matchCount <= 1 && foundSymptomIds.length <= 2) {
+    confidencePercent = Math.max(20, confidencePercent - 15);
+  }
+  
+  // Ensure within bounds
+  return Math.max(5, Math.min(95, confidencePercent));
+};
+
+/**
+ * Generates formatted verdict string for display.
+ * Creates a visual representation of confidence level.
+ * 
+ * @param diagnosis - Disease name
+ * @param confidence - Confidence 0-100
+ * @param reasoning - Brief explanation
+ * @returns Formatted verdict string with visual indicator
+ */
+export const formatVerdictDisplay = (
+  diagnosis: string,
+  confidence: number,
+  reasoning: string
+): string => {
+  const bars = Math.round(confidence / 10);
+  const emptyBars = 10 - bars;
+  const bar = '█'.repeat(bars) + '░'.repeat(emptyBars);
+  
+  return `${diagnosis} | ${confidence}% | [${bar}]\n${reasoning}`;
+};
 
 /**
  * Helper to find disease candidates in the local DB based on detected symptoms.

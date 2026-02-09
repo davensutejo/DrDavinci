@@ -1,15 +1,16 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
-import { Message, AnalysisResult, GroundingSource, User, ChatSession } from './types';
+import { Message, AnalysisResult, GroundingSource, User, ChatSession, VerdictDiagnosis, ConversationState } from './types';
 import Header from './components/Header';
 import Disclaimer from './components/Disclaimer';
 import DiagnosisResult from './components/DiagnosisResult';
 import AuthView from './components/AuthView';
 import SearchConsultations from './components/SearchConsultations';
+import VerdictCard from './components/VerdictCard';
 import { SYSTEM_INSTRUCTION } from './constants';
 import { extractSymptoms } from './services/nlpService';
-import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence } from './services/inferenceService';
+import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse } from './services/inferenceService';
 import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
@@ -503,6 +504,9 @@ const App: React.FC = () => {
         results.sort((a, b) => b.score - a.score);
       }
 
+      // Extract structured verdicts from AI response
+      const verdicts = extractVerdictsFromResponse(botContent);
+
       setActiveSession(prev => {
         if (!prev) return null;
         const newSession = {
@@ -512,7 +516,8 @@ const App: React.FC = () => {
               ...m, 
               results: results.length > 0 ? results : undefined,
               extractedSymptoms: foundSymptomIds,
-              groundingSources: groundingSources.length > 0 ? groundingSources : undefined
+              groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
+              verdicts: verdicts.length > 0 ? verdicts : undefined
             } : m
           )
         };
@@ -719,6 +724,9 @@ const App: React.FC = () => {
                           ))}
                         </div>
                       </div>
+                    )}
+                    {msg.verdicts && msg.verdicts.length > 0 && (
+                      <VerdictCard verdicts={msg.verdicts} />
                     )}
                     {msg.results && (
                       <div className="mt-6 pt-5 border-t border-slate-100">

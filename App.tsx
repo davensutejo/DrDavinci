@@ -19,17 +19,6 @@ import { generateUUID } from './utils/uuid';
 const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
   if (!content.trim()) return null;
 
-  const parts = content.split('\n').map((line, i) => {
-    if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-      const text = line.trim().substring(2);
-      return <li key={i} className="ml-4 list-disc mb-1">{parseInline(text)}</li>;
-    }
-    if (line.trim().startsWith('### ')) {
-      return <h3 key={i} className="text-sm font-bold text-teal-800 uppercase tracking-wider mt-4 mb-2">{parseInline(line.substring(4))}</h3>;
-    }
-    return <p key={i} className="mb-2 last:mb-0 leading-relaxed">{parseInline(line)}</p>;
-  });
-
   function parseInline(text: string) {
     const combinedRegex = /(\*\*(.*?)\*\*|\[(\d+)\])/g;
     const items = [];
@@ -57,7 +46,82 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
     return items.length > 0 ? items : text;
   }
 
-  return <div className="text-slate-800">{parts}</div>;
+  const lines = content.split('\n');
+  const parts: any[] = [];
+  let listItems: any[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      if (listType === 'ul') {
+        parts.push(<ul key={`list-${Date.now()}-${Math.random()}`} className="space-y-1.5 ml-5 mb-3">{listItems}</ul>);
+      } else if (listType === 'ol') {
+        parts.push(<ol key={`list-${Date.now()}-${Math.random()}`} className="space-y-1.5 ml-5 mb-3 list-decimal">{listItems}</ol>);
+      }
+      listItems = [];
+      listType = null;
+    }
+  };
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    
+    // Empty lines create spacing
+    if (!trimmed) {
+      flushList();
+      parts.push(<div key={`space-${i}`} className="h-2" />);
+      return;
+    }
+
+    // Headers
+    if (trimmed.startsWith('#### ')) {
+      flushList();
+      parts.push(<h4 key={i} className="text-xs font-bold text-slate-700 uppercase tracking-wider mt-3 mb-2">{parseInline(trimmed.substring(5))}</h4>);
+      return;
+    }
+    if (trimmed.startsWith('### ')) {
+      flushList();
+      parts.push(<h3 key={i} className="text-sm font-bold text-teal-700 uppercase tracking-widest mt-4 mb-3 pb-2 border-b-2 border-teal-200">{parseInline(trimmed.substring(4))}</h3>);
+      return;
+    }
+    if (trimmed.startsWith('## ')) {
+      flushList();
+      parts.push(<h2 key={i} className="text-base font-bold text-teal-800 uppercase tracking-widest mt-5 mb-3 pb-2.5 border-b-2 border-teal-300">{parseInline(trimmed.substring(3))}</h2>);
+      return;
+    }
+
+    // Unordered lists
+    if (trimmed.match(/^[-*]\s/)) {
+      if (listType !== 'ul') {
+        flushList();
+        listType = 'ul';
+      }
+      const text = trimmed.substring(2);
+      listItems.push(<li key={i} className="text-sm leading-relaxed text-slate-700">{parseInline(text)}</li>);
+      return;
+    }
+
+    // Ordered lists
+    if (trimmed.match(/^\d+\.\s/)) {
+      if (listType !== 'ol') {
+        flushList();
+        listType = 'ol';
+      }
+      const text = trimmed.substring(trimmed.indexOf('.') + 1).trim();
+      listItems.push(<li key={i} className="text-sm leading-relaxed text-slate-700">{parseInline(text)}</li>);
+      return;
+    }
+
+    // Regular paragraphs
+    flushList();
+    if (trimmed) {
+      parts.push(<p key={i} className="mb-3 text-slate-700 leading-relaxed text-sm">{parseInline(trimmed)}</p>);
+    }
+  });
+
+  flushList();
+
+  return <div className="space-y-1">{parts}</div>;
 };
 
 const WELCOME_MESSAGE = (name: string): Message => ({
@@ -772,29 +836,32 @@ DO NOT provide FINAL VERDICT yet.`;
           <span className="text-[10px] font-bold text-slate-400 truncate max-w-[150px] uppercase tracking-wider">{activeSession?.title}</span>
         </div>
 
-        <main className="flex-1 overflow-y-auto custom-scrollbar relative">
-          <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 pt-4 pb-8">
+        <main className="flex-1 overflow-y-auto custom-scrollbar relative bg-gradient-to-b from-slate-50/30 to-white">
+          <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 pt-4 pb-12">
             {activeSession?.messages.map((msg) => (
               <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-3 duration-500`}>
-                <div className={`max-w-[92%] md:max-w-[85%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-5 py-4 rounded-3xl text-[15px] leading-relaxed transition-all shadow-sm ${msg.role === 'user' ? 'bg-teal-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'}`}>
+                <div className={`max-w-[92%] md:max-w-[80%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  <div className={`px-6 py-4 rounded-2xl text-sm leading-relaxed transition-all ${msg.role === 'user' 
+                    ? 'bg-gradient-to-br from-teal-600 to-teal-700 text-white rounded-tr-none shadow-lg shadow-teal-500/20 hover:shadow-xl hover:shadow-teal-500/30' 
+                    : 'bg-white border-2 border-slate-100 text-slate-800 rounded-tl-none shadow-md hover:shadow-lg hover:border-slate-200'}`}>
                     {msg.imageUrl && (
-                      <div className="mb-3 overflow-hidden rounded-2xl border border-white/20">
-                        <img src={msg.imageUrl} alt="Submission" className="w-full max-h-64 object-cover" />
+                      <div className="mb-4 overflow-hidden rounded-lg border-2 border-slate-200">
+                        <img src={msg.imageUrl} alt="Submission" className="w-full max-h-72 object-cover" />
                       </div>
                     )}
                     <MarkdownText content={msg.content} />
                     {msg.groundingSources && (
-                      <div className="mt-6 pt-5 border-t border-slate-100">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-4">Clinical References</span>
-                        <div className="grid grid-cols-1 gap-2">
+                      <div className="mt-6 pt-5 border-t-2 border-slate-100">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-4">🔗 Clinical References</span>
+                        <div className="grid grid-cols-1 gap-3">
                           {msg.groundingSources.map((source, i) => (
-                            <a key={i} href={source.uri} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-teal-50 transition-all group">
-                              <span className="flex-shrink-0 flex items-center justify-center bg-teal-600 text-white text-[10px] font-bold w-5 h-5 rounded-lg mt-0.5">{i + 1}</span>
+                            <a key={i} href={source.uri} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 p-3.5 rounded-lg bg-slate-50 border-2 border-slate-100 hover:bg-teal-50 hover:border-teal-200 transition-all group">
+                              <span className="flex-shrink-0 flex items-center justify-center bg-teal-600 text-white text-xs font-bold w-6 h-6 rounded-lg mt-0.5 group-hover:bg-teal-700 transition-colors shadow-sm">{i + 1}</span>
                               <div className="flex-1 min-w-0">
-                                <span className="block text-xs font-semibold text-slate-700 group-hover:text-teal-700 truncate">{source.title}</span>
-                                <span className="block text-[10px] text-slate-400 truncate">{source.uri}</span>
+                                <span className="block text-xs font-bold text-slate-800 group-hover:text-teal-700 truncate transition-colors">{source.title}</span>
+                                <span className="block text-[11px] text-slate-500 truncate group-hover:text-slate-600 transition-colors">{source.uri}</span>
                               </div>
+                              <span className="flex-shrink-0 text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity">↗</span>
                             </a>
                           ))}
                         </div>
@@ -812,7 +879,7 @@ DO NOT provide FINAL VERDICT yet.`;
                       </>
                     )}
                   </div>
-                  <span className="text-[10px] font-medium text-slate-400 mt-2 uppercase tracking-widest">
+                  <span className="text-xs font-semibold text-slate-500 mt-2 px-1 opacity-75">
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -820,12 +887,13 @@ DO NOT provide FINAL VERDICT yet.`;
             ))}
             {isTyping && (
               <div className="flex justify-start animate-in fade-in duration-300">
-                <div className="bg-white border border-slate-200 py-3 px-5 rounded-3xl rounded-tl-none flex items-center gap-3 shadow-sm animate-pulse">
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2 h-2 bg-teal-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                <div className="bg-white border-2 border-teal-100 py-4 px-5 rounded-2xl rounded-tl-none flex items-center gap-3 shadow-md hover:shadow-lg hover:border-teal-200 transition-all">
+                  <div className="flex gap-2">
+                    <span className="w-2.5 h-2.5 bg-gradient-to-b from-teal-500 to-teal-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-gradient-to-b from-teal-500 to-teal-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2.5 h-2.5 bg-gradient-to-b from-teal-500 to-teal-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                   </div>
+                  <span className="text-xs text-teal-600 font-medium ml-2">Dr. Davinci is thinking...</span>
                 </div>
               </div>
             )}

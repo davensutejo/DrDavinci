@@ -35,9 +35,11 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   
   if (!responseText || responseText.trim().length === 0) return verdicts;
   
-  // Pattern: "- Disease Name: XX% confidence - reasoning"
-  // Or: "Disease Name: XX% - reasoning"
-  const verdictPattern = /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%\s*(?:confidence)?\s*(?:-\s*(.+?))?$/gmi;
+  // Pattern: "- Disease Name: XX% confidence - reasoning" or ANY LANGUAGE equivalent
+  // Matches: "- Nom Maladie: XX% confiance - raison" (French)
+  // Matches: "- Nombre Enfermedad: XX% confianza - razón" (Spanish)
+  // Language-independent: matches any characters before colon
+  const verdictPattern = /^[\s\-]*([^:]+?):\s*(\d+)%\s*(?:[-–]\s*(.+?))?$/gmi;
   
   let match;
   let rank = 1;
@@ -74,7 +76,8 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   });
   
   // Extract sources from [1] Organization (https://url) - Description format
-  const sourcesPattern = /\[(\d+)\]\s*([A-Za-z\s&]+?)\s*\((https?:\/\/[^\)]+)\)\s*-\s*([^\n]+)/g;
+  // Language-independent: [1] ANY TEXT (https://...) - Description
+  const sourcesPattern = /\[(\d+)\]\s*([^\(]+?)\s*\((https?:\/\/[^\)]+)\)\s*[-–]\s*([^\n]+)/g;
   const sources: EvidenceSource[] = [];
   let sourceMatch;
   while ((sourceMatch = sourcesPattern.exec(responseText)) !== null) {

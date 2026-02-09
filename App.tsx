@@ -494,14 +494,6 @@ DO NOT provide FINAL VERDICT yet.`;
       let botContent = "";
       const botMsgId = (Date.now() + 1).toString();
       let lastResponse: GenerateContentResponse | null = null;
-      
-      setActiveSession(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          messages: [...prev.messages, { id: botMsgId, role: 'bot', content: "", timestamp: new Date() }]
-        };
-      });
 
       // Route to appropriate API
       if (useOpenRouterRef.current) {
@@ -529,10 +521,18 @@ DO NOT provide FINAL VERDICT yet.`;
                   botContent += content;
                   setActiveSession(prev => {
                     if (!prev) return null;
-                    return {
-                      ...prev,
-                      messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
-                    };
+                    const msgExists = prev.messages.some(m => m.id === botMsgId);
+                    if (msgExists) {
+                      return {
+                        ...prev,
+                        messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+                      };
+                    } else {
+                      return {
+                        ...prev,
+                        messages: [...prev.messages, { id: botMsgId, role: 'bot', content: botContent, timestamp: new Date() }]
+                      };
+                    }
                   });
                 }
               } catch (e) {
@@ -551,10 +551,18 @@ DO NOT provide FINAL VERDICT yet.`;
           botContent += resp.text || "";
           setActiveSession(prev => {
             if (!prev) return null;
-            return {
-              ...prev,
-              messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
-            };
+            const msgExists = prev.messages.some(m => m.id === botMsgId);
+            if (msgExists) {
+              return {
+                ...prev,
+                messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+              };
+            } else {
+              return {
+                ...prev,
+                messages: [...prev.messages, { id: botMsgId, role: 'bot', content: botContent, timestamp: new Date() }]
+              };
+            }
           });
         }
       }
@@ -595,6 +603,8 @@ DO NOT provide FINAL VERDICT yet.`;
               current ? { ...current, id: realSessionId } : null
             );
           }
+          // Refresh sidebar to show updated session in history
+          refreshSessions();
         });
         
         return newSession;

@@ -25,15 +25,10 @@ export const accumulateAllSymptoms = (messages: Message[]): string[] => {
 
 /**
  * Parses AI response to extract structured verdicts with confidence scores.
- * Looks for pattern: "- Disease Name: XX% confidence - reasoning"
- * 
- * Multiple matching patterns supported for robustness:
- * Pattern 1: "- Disease Name: 85% confidence - reasoning"
- * Pattern 2: "- Disease Name: 85% - reasoning" (without "confidence" word)
- * Pattern 3: "Disease Name: 85% confidence - reasoning" (without dash)
+ * Also removes verdict markers from the response for clean display.
  * 
  * @param responseText - The AI response text
- * @returns Array of parsed verdicts with confidence scores
+ * @returns Object with cleaned content and parsed verdicts
  */
 export const extractVerdictsFromResponse = (responseText: string): VerdictDiagnosis[] => {
   const verdicts: VerdictDiagnosis[] = [];
@@ -41,14 +36,8 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   if (!responseText || responseText.trim().length === 0) return verdicts;
   
   // Pattern: "- Disease Name: XX% confidence - reasoning"
-  // Handles multiple variations:
-  // - Optional leading dash and spaces
-  // - Disease name (allows parentheses, spaces)
-  // - Colon
-  // - Number + percent sign
-  // - Optional "confidence" word
-  // - Optional dash and reasoning
-  const verdictPattern = /^[\s\-]*([\w\s\(\)]+?):\s*(\d+)%\s*(?:confidence)?\s*(?:-\s*(.+?))?$/gmi;
+  // Or: "Disease Name: XX% - reasoning"
+  const verdictPattern = /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%\s*(?:confidence)?\s*(?:-\s*(.+?))?$/gmi;
   
   let match;
   let rank = 1;
@@ -105,6 +94,49 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   
   // Return only top 2 verdicts - ignore the rest
   return verdicts.slice(0, 2);
+};
+
+/**
+ * Cleans the bot response by removing verdict markers and duplicate sections
+ * This ensures clean display while verdicts are extracted separately
+ */
+export const cleanBotResponse = (text: string): string => {
+  // Remove [FINAL VERDICT] and [/FINAL VERDICT] markers
+  let cleaned = text.replace(/\[\s*FINAL\s+VERDICT\s*\]/gi, '').replace(/\[\s*\/FINAL\s+VERDICT\s*\]/gi, '');
+  
+  // Remove [CLINICAL ASSESSMENT] markers
+  cleaned = cleaned.replace(/\[\s*CLINICAL\s+ASSESSMENT\s*\]/gi, '').replace(/\[\s*\/CLINICAL\s+ASSESSMENT\s*\]/gi, '');
+  
+  // Remove lines that are ONLY verdict listings (format: - Disease: XX% confidence - reason)
+  // But keep narrative text that might have this format
+  const lines = cleaned.split('\n');
+  const processedLines = lines.filter((line, index, arr) => {
+    const trimmed = line.trim();
+    
+    // Check if line is a verdict listing
+    const isVerdictLine = /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%\s*(?:confidence)?/i.test(trimmed);
+    
+    // Keep it only if there's surrounding context (not in verdict section)
+    if (isVerdictLine) {
+      // Check if previous and next lines are also verdicts
+      const prevIsVerdict = index > 0 && /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%/i.test(arr[index - 1].trim());
+      const nextIsVerdict = index < arr.length - 1 && /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%/i.test(arr[index + 1].trim());
+      
+      // Only remove if surrounded by other verdicts (indicates verdict listing block)
+      if (prevIsVerdict && nextIsVerdict) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+  
+  cleaned = processedLines.join('\n');
+  
+  // Remove multiple consecutive blank lines
+  cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+  
+  return cleaned.trim();
 };
 
 /**

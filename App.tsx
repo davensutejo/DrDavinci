@@ -11,7 +11,7 @@ import VerdictCard from './components/VerdictCard';
 import TreatmentPlanComponent from './components/TreatmentPlan';
 import { SYSTEM_INSTRUCTION, SYMPTOMS_DB } from './constants';
 import { extractSymptoms } from './services/nlpService';
-import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse, accumulateAllSymptoms } from './services/inferenceService';
+import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse, accumulateAllSymptoms, cleanBotResponse } from './services/inferenceService';
 import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
@@ -644,6 +644,9 @@ DO NOT provide FINAL VERDICT yet.`;
 
       // Extract verdict structures from AI response
       const verdicts = extractVerdictsFromResponse(botContent);
+      
+      // Clean response content to remove verdict markers for clean display
+      const cleanedContent = cleanBotResponse(botContent);
 
       setActiveSession(prev => {
         if (!prev) return null;
@@ -651,7 +654,8 @@ DO NOT provide FINAL VERDICT yet.`;
           ...prev,
           messages: prev.messages.map(m => 
             m.id === botMsgId ? { 
-              ...m, 
+              ...m,
+              content: cleanedContent, 
               extractedSymptoms: userSymptomIds,
               groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
               verdicts: verdicts.length > 0 ? verdicts : undefined

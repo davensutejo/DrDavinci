@@ -346,7 +346,7 @@ const App: React.FC = () => {
       recognitionRef.current.start(); 
     } catch (e: any) {
         setIsRecording(false);
-       (e.message?.includes('already started')) {
+       if (e.message?.includes('already started')) {
         recognitionRef.current.stop();
         setTimeout(() => recognitionRef.current.start(), 100);
       }

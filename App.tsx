@@ -439,13 +439,47 @@ const App: React.FC = () => {
       // Count symptoms BEFORE sending to AI
       const totalSymptomCount = countTotalUserSymptoms(updatedMessages);
       
-      // Create a preamble that forces Gemini to make the right decision
-      const symptomCountPreamble = totalSymptomCount >= 3 
-        ? `[SYSTEM: Patient has reported ${totalSymptomCount} distinct symptoms across this conversation. YOU MUST provide a FINAL VERDICT section with confident diagnosis percentages in this response.]`
-        : `[SYSTEM: Patient has reported ${totalSymptomCount} symptoms so far. Continue asking clarifying questions. DO NOT provide FINAL VERDICT yet.]`;
+      // Build conversation history so Gemini remembers what was said before
+      const conversationHistory = updatedMessages
+        .slice(0, -1) // Exclude the message we just added
+        .filter(m => m.role === 'user')
+        .map(m => `- ${m.content}`)
+        .join('\n');
       
-      // Construct the actual user message with preamble
-      const userMessageWithContext = `${symptomCountPreamble}\n\n${userText || "Medical image attached for analysis."}`;
+      // Create preamble with full context - this is what forces Gemini to act right
+      let symptomCountPreamble: string;
+      if (totalSymptomCount >= 3) {
+        symptomCountPreamble = `[CRITICAL INSTRUCTION - PATIENT HAS ${totalSymptomCount} SYMPTOMS]
+
+Patient's symptoms reported so far:
+${conversationHistory}
+
+CURRENT PATIENT UPDATE: ${userText || "Image attached"}
+
+YOU MUST NOW PROVIDE A FINAL VERDICT SECTION with specific disease names and confidence percentages.
+DO NOT ask more questions. DO NOT repeat back symptoms. Provide the verdict.
+
+Format:
+[FINAL VERDICT]
+- Disease Name: XX% confidence - reasoning
+- Disease Name: XX% confidence - reasoning
+[/FINAL VERDICT]`;
+      } else {
+        symptomCountPreamble = `[PATIENT HAS ${totalSymptomCount}/${3} SYMPTOMS NEEDED FOR VERDICT]
+
+Symptoms reported so far:
+${conversationHistory}
+
+CURRENT PATIENT UPDATE: ${userText || "Image attached"}
+
+Continue asking clarifying questions to understand the patient better.
+DO NOT ask about symptoms the patient already mentioned.
+Focus on gathering more information.
+DO NOT provide FINAL VERDICT yet.`;
+      }
+      
+      // Construct the actual user message with full context
+      const userMessageWithContext = `${symptomCountPreamble}`;
       
       messageContent = currentImg 
         ? { 
@@ -757,11 +791,6 @@ const App: React.FC = () => {
                     )}
                     {msg.verdicts && msg.verdicts.length > 0 && (
                       <VerdictCard verdicts={msg.verdicts} />
-                    )}
-                    {(!msg.verdicts || msg.verdicts.length === 0) && msg.results && msg.extractedSymptoms && msg.extractedSymptoms.length >= 3 && (
-                      <div className="mt-6 pt-5 border-t border-slate-100">
-                        <DiagnosisResult results={msg.results} />
-                      </div>
                     )}
                   </div>
                   <span className="text-[10px] font-medium text-slate-400 mt-2 uppercase tracking-widest">

@@ -84,6 +84,7 @@ const App: React.FC = () => {
   const chatRef = useRef<Chat | null>(null);
   const finalTranscriptRef = useRef<string>(''); // Track final transcript to avoid duplicates
   const lastProcessedIndexRef = useRef<number>(0); // Track last processed result index
+  const currentApiKeyRef = useRef<string>(process.env.API_KEY || ''); // Track current API key being used
 
   // Sync session list on load or user change
   const refreshSessions = useCallback(async () => {
@@ -126,7 +127,7 @@ const App: React.FC = () => {
   // Initialize Chat Engine when session changes
   useEffect(() => {
     if (currentUser && activeSession && activeSession.id !== 'new') {
-      const apiKey = process.env.API_KEY;
+      const apiKey = currentApiKeyRef.current || process.env.API_KEY;
       if (!apiKey) {
         setConfigError("API Key is missing. Please configure API_KEY in your environment settings.");
         return;
@@ -284,7 +285,7 @@ const App: React.FC = () => {
     if ((!input.trim() && !selectedImage) || !currentUser || !activeSession) return;
     
     if (!chatRef.current) {
-      const apiKey = process.env.API_KEY;
+      const apiKey = currentApiKeyRef.current || process.env.API_KEY;
       if (!apiKey) {
         setConfigError("Cannot send message: API Key is missing.");
         return;
@@ -406,10 +407,27 @@ const App: React.FC = () => {
       console.error("API Error:", error);
       const errorMessage = error?.message || error?.toString() || "Unknown error";
       const errorDetails = error?.status ? ` (Status: ${error.status})` : "";
-      setActiveSession(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine: ${errorMessage}${errorDetails}. Please verify your API key and connection.`, timestamp: new Date() }]
-      } : null);
+      
+      // Check if it's a rate limit error and we have a backup key
+      const isRateLimit = error?.status === 429 || errorMessage.includes('429') || 
+                         errorMessage.includes('rate') || errorMessage.includes('quota') ||
+                         errorMessage.includes('RESOURCE_EXHAUSTED');
+      
+      if (isRateLimit && process.env.API_KEY_BACKUP && currentApiKeyRef.current !== process.env.API_KEY_BACKUP) {
+        console.warn('⚠️ API rate limit hit on primary key. Switching to backup key...');
+        currentApiKeyRef.current = process.env.API_KEY_BACKUP;
+        chatRef.current = null; // Reset chat to reinitialize with backup key
+        
+        setActiveSession(prev => prev ? {
+          ...prev,
+          messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: "The primary API reached its rate limit. I've switched to a backup API key. Please try your request again.", timestamp: new Date() }]
+        } : null);
+      } else {
+        setActiveSession(prev => prev ? {
+          ...prev,
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine: ${errorMessage}${errorDetails}. Please verify your API key and connection.`, timestamp: new Date() }]
+        } : null);
+      }
     } finally {
       setIsTyping(false);
     }

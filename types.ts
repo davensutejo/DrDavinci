@@ -57,6 +57,19 @@ export interface Message {
   verdicts?: VerdictDiagnosis[];
 }
 
+export interface TreatmentPlan {
+  disease: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  homecare: string[];
+  medications: {
+    otc?: string[];
+    prescription?: string[];
+  };
+  seekCareIf: string[];
+  preventionTips: string[];
+  recoveryTime: string;
+}
+
 export interface ChatSession {
   id: string;
   userId: string;

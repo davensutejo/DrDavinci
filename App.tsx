@@ -8,9 +8,10 @@ import DiagnosisResult from './components/DiagnosisResult';
 import AuthView from './components/AuthView';
 import SearchConsultations from './components/SearchConsultations';
 import VerdictCard from './components/VerdictCard';
-import { SYSTEM_INSTRUCTION } from './constants';
+import TreatmentPlanComponent from './components/TreatmentPlan';
+import { SYSTEM_INSTRUCTION, SYMPTOMS_DB } from './constants';
 import { extractSymptoms } from './services/nlpService';
-import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse } from './services/inferenceService';
+import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse, accumulateAllSymptoms } from './services/inferenceService';
 import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
@@ -117,15 +118,7 @@ const App: React.FC = () => {
    * Count total symptoms from all user messages in the session
    */
   const countTotalUserSymptoms = useCallback((messages: Message[]): number => {
-    const allSymptomIds = new Set<string>();
-    
-    messages.forEach(msg => {
-      if (msg.role === 'user' && msg.extractedSymptoms) {
-        msg.extractedSymptoms.forEach(symptomId => allSymptomIds.add(symptomId));
-      }
-    });
-    
-    return allSymptomIds.size;
+    return accumulateAllSymptoms(messages).length;
   }, []);
 
   /**
@@ -436,8 +429,14 @@ const App: React.FC = () => {
     try {
       let messageContent: any;
       
-      // Count symptoms BEFORE sending to AI
-      const totalSymptomCount = countTotalUserSymptoms(updatedMessages);
+      // Accumulate ALL symptoms from entire conversation
+      const allAccumulatedSymptoms = accumulateAllSymptoms(updatedMessages);
+      const totalSymptomCount = allAccumulatedSymptoms.length;
+      
+      // Format symptom list for preamble
+      const symptomLabels = allAccumulatedSymptoms
+        .map(id => SYMPTOMS_DB.find(s => s.id === id)?.label || id)
+        .join(', ');
       
       // Build conversation history so Gemini remembers what was said before
       const conversationHistory = updatedMessages
@@ -449,12 +448,13 @@ const App: React.FC = () => {
       // Create preamble with full context - this is what forces Gemini to act right
       let symptomCountPreamble: string;
       if (totalSymptomCount >= 3) {
-        symptomCountPreamble = `[CRITICAL INSTRUCTION - PATIENT HAS ${totalSymptomCount} SYMPTOMS]
+        symptomCountPreamble = `[CRITICAL INSTRUCTION - PATIENT HAS ${totalSymptomCount} DISTINCT SYMPTOMS]
+Accumulated symptoms: ${symptomLabels}
 
-Patient's symptoms reported so far:
+Patient's messages:
 ${conversationHistory}
 
-CURRENT PATIENT UPDATE: ${userText || "Image attached"}
+CURRENT UPDATE: ${userText || "Image attached"}
 
 YOU MUST NOW PROVIDE A FINAL VERDICT SECTION with specific disease names and confidence percentages.
 DO NOT ask more questions. DO NOT repeat back symptoms. Provide the verdict.
@@ -466,14 +466,15 @@ Format:
 [/FINAL VERDICT]`;
       } else {
         symptomCountPreamble = `[PATIENT HAS ${totalSymptomCount}/${3} SYMPTOMS NEEDED FOR VERDICT]
+Current symptoms: ${symptomLabels || 'None reported yet'}
 
-Symptoms reported so far:
+Patient's messages:
 ${conversationHistory}
 
-CURRENT PATIENT UPDATE: ${userText || "Image attached"}
+NEW UPDATE: ${userText || "Image attached"}
 
 Continue asking clarifying questions to understand the patient better.
-DO NOT ask about symptoms the patient already mentioned.
+DO NOT ask about symptoms the patient already mentioned: ${symptomLabels || 'none yet'}
 Focus on gathering more information.
 DO NOT provide FINAL VERDICT yet.`;
       }
@@ -790,7 +791,15 @@ DO NOT provide FINAL VERDICT yet.`;
                       </div>
                     )}
                     {msg.verdicts && msg.verdicts.length > 0 && (
-                      <VerdictCard verdicts={msg.verdicts} />
+                      <>
+                        <VerdictCard verdicts={msg.verdicts} />
+                        {msg.verdicts[0] && (
+                          <TreatmentPlanComponent 
+                            disease={msg.verdicts[0].disease}
+                            confidence={msg.verdicts[0].confidence}
+                          />
+                        )}
+                      </>
                     )}
                   </div>
                   <span className="text-[10px] font-medium text-slate-400 mt-2 uppercase tracking-widest">

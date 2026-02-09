@@ -1,6 +1,27 @@
 
 import { DISEASES_DB, SYMPTOMS_DB } from '../constants';
-import { AnalysisResult, VerdictDiagnosis } from '../types';
+import { AnalysisResult, VerdictDiagnosis, Message } from '../types';
+
+/**
+ * Accumulates all unique symptoms reported across the entire conversation.
+ * Prevents duplicate symptoms when aggregating across multiple user messages.
+ * 
+ * @param messages - Array of all messages in the conversation
+ * @returns Array of unique accumulated symptom IDs
+ */
+export const accumulateAllSymptoms = (messages: Message[]): string[] => {
+  const allSymptomIds = new Set<string>();
+  
+  messages.forEach(msg => {
+    if (msg.role === 'user' && msg.extractedSymptoms) {
+      msg.extractedSymptoms.forEach(symptomId => {
+        allSymptomIds.add(symptomId);
+      });
+    }
+  });
+  
+  return Array.from(allSymptomIds);
+};
 
 /**
  * Parses AI response to extract structured verdicts with confidence scores.
@@ -63,7 +84,8 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
     v.rank = index + 1;
   });
   
-  return verdicts;
+  // Return only top 2 verdicts - ignore the rest
+  return verdicts.slice(0, 2);
 };
 
 /**

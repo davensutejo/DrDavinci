@@ -1,5 +1,5 @@
 
-import { Symptom, Disease } from './types';
+import { Symptom, Disease, TreatmentPlan } from './types';
 
 export const SYMPTOMS_DB: Symptom[] = [
   { id: 'fever', label: 'Fever', keywords: ['fever', 'high temp', 'temperature', 'hot', 'chills', 'feverish'] },
@@ -256,6 +256,7 @@ IF user provides 0-2 symptoms:
 2. **Clarifying Questions**: Ask 1-2 high-value questions to gather more info
    Format: Ask specific, actionable questions (e.g., "Do you have fever?" "Any cough?")
    DO NOT output a Final Verdict section
+   DO NOT output sources when in this phase
 
 IF user provides 3+ symptoms:
 1. **Acknowledgment**: Validate symptoms with empathy (1 sentence)
@@ -263,12 +264,12 @@ IF user provides 3+ symptoms:
 3. **FINAL VERDICT**: MANDATORY section with EXACT format below:
    
    === VERDICT FORMAT (DO NOT DEVIATE) ===
+   Provide EXACTLY 2 top-ranked diagnoses (not 3, not 5 - exactly 2):
    - Disease Name Here: 85% confidence - One sentence explaining why this matches their symptoms
-   - Disease Name Here: 72% confidence - One sentence explaining why this matches their symptoms
-   - Disease Name Here: 58% confidence - One sentence explaining why this matches their symptoms
-   - Disease Name Here: 45% confidence - One sentence explaining why this matches their symptoms
+   - Disease Name Here: 65% confidence - One sentence explaining why this matches their symptoms
    
    RULES FOR VERDICT FORMAT:
+   * Provide exactly 2 verdicts, ranked by confidence (highest first, then second)
    * Start with dash and space: "- "
    * Disease name EXACTLY as it appears in database
    * Colon after disease name: ":"
@@ -277,22 +278,26 @@ IF user provides 3+ symptoms:
    * Space + dash + space + reasoning: " - Brief reason"
    * Each verdict on NEW LINE starting with "- "
    * Confidence scores 0-100, no decimals
-   * Provide 3-5 verdicts ranked by confidence
+   * DO NOT include more than 2 verdicts
    
    EXAMPLES OF CORRECT FORMAT:
-   - Influenza (Flu): 82% confidence - Fever + cough + headache + body aches is classic flu triad
-   - COVID-19: 65% confidence - Similar presentation but usually includes loss of taste/smell
-   - Common Cold: 48% confidence - Cough present but systemic symptoms suggest more serious condition
-   - Bronchitis: 52% confidence - Cough and fatigue but fever/headache less typical
+   - Influenza (Flu): 82% confidence - Fever + cough + headache is classic flu presentation
+   - COVID-19: 65% confidence - Similar symptoms but respiratory-specific signs less prominent
    
-4. **Clarifying Question** (IF question budget remaining - ask after verdict): Ask 1 high-value question ONLY
-5. **Clinical Evidence & Sources**: Cite 2-3 authoritative sources in this format:
-   [1] WHO - Brief source description
-   [2] CDC - Brief source description
-   [3] Mayo Clinic - Brief source description
+4. **MANDATORY Evidence & Sources**: REQUIRED - Include 2-3 authoritative sources:
    
-   Preferred sources: WHO, CDC, NIH, Mayo Clinic, Cleveland Clinic, Johns Hopkins
-   Show grounding in real medical knowledge, not speculation
+   [1] WHO - Source about condition symptoms/diagnosis
+   [2] CDC - Source about treatment/epidemiology
+   [3] Mayo Clinic - Source about differential diagnosis
+   
+   RULES FOR SOURCES:
+   * Format: [1] Organization - Brief description
+   * Use authoritative sources: WHO, CDC, NIH, Mayo Clinic, Cleveland Clinic, Johns Hopkins
+   * Must be specific to the conditions mentioned in verdicts
+   * Sources are MANDATORY - do NOT skip this section
+   * These demonstrate grounding in real medical knowledge
+
+5. **Clarifying Question** (IF question budget remaining): Ask 1 high-value question ONLY
 
 === CONFIDENCE SCORING RULES (0-100) ===
 - 85-100%: High confidence (strong symptom match, clear match with disease presentation)
@@ -353,6 +358,29 @@ IMPORTANCE NOTE: Always remind user:
 - If symptoms worsen or new symptoms appear, seek medical attention
 - Any uncertainty warrants professional evaluation
 
+=== TREATMENT INFORMATION FOR TOP DIAGNOSIS ===
+
+When providing FINAL VERDICT with 3+ symptoms, include management information for the TOP diagnosis:
+
+Include in a structured format:
+1. Recovery Timeline (e.g., "7-10 days" or "2-4 weeks")
+2. Home Care (3-5 bullet points on what patient should do)
+3. Medications:
+   - OTC options with doses (acetaminophen, ibuprofen, lozenges, etc)
+   - Prescription options that require doctor consultation
+4. Red Flags (when to seek emergency care)
+5. Prevention Tips (how to avoid transmission/recurrence)
+
+EXAMPLE FORMAT:
+"Management Plan for Influenza:
+- Rest: 7-14 days minimum
+- Hydration: Drink fluids frequently
+- Medications: Acetaminophen for fever, antivirals if within 48 hours
+- Red Flags: Difficulty breathing, chest pain, confusion
+- Prevention: Annual vaccine, hand hygiene, isolation from others"
+
+The frontend will render this information in a formatted card for readability.
+
 === CRITICAL RULES ===
 - Count symptoms from user input before deciding phase
 - IF 0-2 symptoms: NO FINAL VERDICT SECTION AT ALL
@@ -366,3 +394,226 @@ IMPORTANCE NOTE: Always remind user:
 Reference Database:
 Symptoms: ${JSON.stringify(SYMPTOMS_DB)}
 Diseases: ${JSON.stringify(DISEASES_DB)}`;
+
+export const TREATMENT_DATABASE: TreatmentPlan[] = [
+  {
+    disease: 'Common Cold',
+    severity: 'mild',
+    homecare: [
+      'Rest for 7-10 days',
+      'Stay hydrated (water, warm tea, broth)',
+      'Use humidifier to ease congestion',
+      'Gargle with salt water for sore throat',
+      'Avoid smoking and secondhand smoke'
+    ],
+    medications: {
+      otc: [
+        'Acetaminophen or ibuprofen for fever/pain',
+        'Decongestants (pseudoephedrine) for congestion',
+        'Honey to soothe throat (especially for cough)',
+        'Vitamin C supplements'
+      ]
+    },
+    seekCareIf: [
+      'Fever lasts more than 10 days',
+      'Cough persists beyond 3 weeks',
+      'Shortness of breath develops',
+      'Symptoms worsen dramatically'
+    ],
+    preventionTips: [
+      'Wash hands frequently (20+ seconds)',
+      'Avoid touching face',
+      'Stay home while symptomatic',
+      'Clean frequently-touched surfaces'
+    ],
+    recoveryTime: '7-10 days'
+  },
+
+  {
+    disease: 'Influenza (Flu)',
+    severity: 'moderate',
+    homecare: [
+      'Rest - critical for recovery (7-14 days)',
+      'Hydration - drink fluids frequently',
+      'Isolate from others for 5-7 days',
+      'Use saline nasal drops for congestion',
+      'Place cool compress on forehead for headache'
+    ],
+    medications: {
+      otc: [
+        'Acetaminophen or ibuprofen for fever/aches',
+        'Cough suppressants (dextromethorphan)',
+        'Decongestants for nasal congestion'
+      ],
+      prescription: [
+        'Antiviral medications (oseltamivir, zanamivir)',
+        '⚠️ MUST START WITHIN 48 HOURS OF SYMPTOM ONSET'
+      ]
+    },
+    seekCareIf: [
+      'Difficulty breathing or shortness of breath',
+      'Persistent chest pain or pressure',
+      'Confusion or difficulty remaining alert',
+      'Severe or persistent vomiting',
+      'Fever returns after 3+ days of improvement'
+    ],
+    preventionTips: [
+      'Annual flu vaccine (most important)',
+      'Avoid close contact with sick people',
+      'Cover coughs/sneezes with elbow',
+      'Wash hands frequently',
+      'Clean surfaces daily'
+    ],
+    recoveryTime: '7-14 days (fatigue may linger 3-4 weeks)'
+  },
+
+  {
+    disease: 'COVID-19',
+    severity: 'moderate',
+    homecare: [
+      'Isolation: Stay home for 5-10 days',
+      'Monitor oxygen levels if possible (keep >94%)',
+      'Stay hydrated - drink electrolyte solutions',
+      'Rest - avoid strenuous activity',
+      'Monitor symptoms closely for worsening'
+    ],
+    medications: {
+      otc: [
+        'Acetaminophen or ibuprofen for fever/aches',
+        'Cough drops or throat lozenges',
+        'Saline nasal spray'
+      ],
+      prescription: [
+        'Antiviral treatments (Paxlovid) if eligible',
+        'Requires prescription - consult doctor asap'
+      ]
+    },
+    seekCareIf: [
+      'Trouble breathing or shortness of breath',
+      'Persistent chest pain or pressure',
+      'Confusion or inability to stay awake',
+      'Bluish lips or face',
+      'Severe abdominal pain',
+      'Loss of consciousness'
+    ],
+    preventionTips: [
+      'Get vaccinated (and boosters)',
+      'Improve ventilation in home',
+      'Wear N95 masks around vulnerable people',
+      'Test before gathering with others',
+      'Isolate if positive'
+    ],
+    recoveryTime: '2-4 weeks (some experience long COVID)'
+  },
+
+  {
+    disease: 'Strep Throat',
+    severity: 'moderate',
+    homecare: [
+      'Rest and avoid strenuous activity',
+      'Gargle with warm salt water 3-4x daily',
+      'Use throat lozenges or throat spray',
+      'Drink warm liquids (tea with honey, warm broth)',
+      'Apply warm compress to neck'
+    ],
+    medications: {
+      otc: [
+        'Ibuprofen or acetaminophen for pain/fever',
+        'Throat lozenges with benzocaine'
+      ],
+      prescription: [
+        'Antibiotics (penicillin or amoxicillin)',
+        '⚠️ MUST COMPLETE FULL COURSE (7-10 days)',
+        'Prevents complications like rheumatic fever'
+      ]
+    },
+    seekCareIf: [
+      'Difficulty swallowing saliva',
+      'Severe throat pain unrelieved by medication',
+      'Fever >103°F (39.4°C)',
+      'Rash develops (could be scarlet fever)',
+      'Swelling affects breathing'
+    ],
+    preventionTips: [
+      'Do NOT share utensils, cups, toothbrushes',
+      'Wash hands frequently',
+      'Cover mouth when coughing/sneezing',
+      'Stay home for 24 hours after antibiotic start'
+    ],
+    recoveryTime: '3-7 days with antibiotics'
+  },
+
+  {
+    disease: 'Sinusitis',
+    severity: 'mild',
+    homecare: [
+      'Nasal saline rinses 2-3x daily (neti pot)',
+      'Use humidifier or breathe steam from hot shower',
+      'Elevate head with extra pillows',
+      'Drink warm fluids',
+      'Apply warm compress to sinuses (cheeks/forehead)',
+      'Avoid irritants (smoke, perfume, air pollution)'
+    ],
+    medications: {
+      otc: [
+        'Saline nasal spray or drops',
+        'Decongestants (pseudoephedrine) - short term only',
+        'Acetaminophen or ibuprofen for pain',
+        'Expectorants (guaifenesin) to loosen mucus'
+      ],
+      prescription: [
+        'Nasal corticosteroid spray (fluticasone)',
+        'Antibiotics if bacterial (amoxicillin-clavulanate)'
+      ]
+    },
+    seekCareIf: [
+      'Fever >101.5°F (38.6°C)',
+      'Severe headache with stiff neck',
+      'Swelling around eyes',
+      'Vision changes',
+      'Symptoms worsen after 7 days'
+    ],
+    preventionTips: [
+      'Avoid allergens and irritants',
+      'Use saline rinses during cold season',
+      'Stay hydrated',
+      'Treat allergies promptly',
+      'Avoid air travel when congested'
+    ],
+    recoveryTime: '7-10 days acute; chronic can last weeks'
+  },
+
+  {
+    disease: 'Mononucleosis (Mono)',
+    severity: 'moderate',
+    homecare: [
+      'REST - critical (often requires 2-3 weeks)',
+      'Stay hydrated - drink lots of fluids',
+      'Eat soft foods if swallowing painful',
+      'Use throat lozenges',
+      'Gargle with salt water',
+      'Take warm baths to ease body aches'
+    ],
+    medications: {
+      otc: [
+        'Acetaminophen or ibuprofen for fever/pain',
+        'Throat lozenges with anesthetic'
+      ]
+    },
+    seekCareIf: [
+      'Difficulty breathing or swallowing',
+      'Severe abdominal pain (enlarged spleen)',
+      'Persistent high fever (>103.5°F)',
+      'Yellow eyes or skin (liver involvement)',
+      'Confusion or severe headache'
+    ],
+    preventionTips: [
+      'Do NOT share drinking glasses or utensils',
+      'Do NOT kiss while symptomatic',
+      'Avoid contact sports for 3-4 weeks (spleen risk)',
+      'Wash hands frequently',
+      'Cover mouth when coughing/sneezing'
+    ],
+    recoveryTime: '2-4 weeks acute; fatigue can last weeks-months'
+  }
+];

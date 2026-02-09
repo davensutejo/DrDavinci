@@ -206,9 +206,15 @@ const App: React.FC = () => {
     return [];
   }, [currentUser]);
 
-  // Get next available API key (rotate through all 6 Gemini keys)
+  // Get next available API key (prioritize OpenRouter, fallback to Gemini keys)
   const getNextApiKey = useCallback((): [string, number, boolean] => {
-    // Find next key that hasn't been exhausted
+    // PRIORITY 1: OpenRouter (check first if available and not previously failed)
+    if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
+      useOpenRouterRef.current = true;
+      return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
+    }
+    
+    // PRIORITY 2: Rotate through Gemini keys
     for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
       const nextIndex = (currentApiKeyIndexRef.current + i) % GEMINI_API_KEYS.length;
       if (!exhaustedKeysRef.current.has(nextIndex)) {
@@ -217,18 +223,15 @@ const App: React.FC = () => {
       }
     }
     
-    // All Gemini keys exhausted, check for OpenRouter
-    if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
-      useOpenRouterRef.current = true;
-      return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
+    // All keys exhausted, reset and try again from OpenRouter
+    if (process.env.OPENROUTER_API_KEY) {
+      exhaustedKeysRef.current.clear();
+      currentApiKeyIndexRef.current = 0;
+      useOpenRouterRef.current = false;
+      return getNextApiKey(); // Recursive call to start fresh with OpenRouter
     }
     
-    // If all keys exhausted, show them we tried OpenRouter
-    if (useOpenRouterRef.current && !process.env.OPENROUTER_API_KEY) {
-      // OpenRouter not configured
-    }
-    
-    // If all exhausted, reset and start from beginning
+    // Last resort: reset Gemini keys and try again
     exhaustedKeysRef.current.clear();
     useOpenRouterRef.current = false;
     currentApiKeyIndexRef.current = 0;
@@ -558,51 +561,94 @@ DO NOT provide FINAL VERDICT yet.`;
       let botContent = "";
       const botMsgId = (Date.now() + 1).toString();
       let lastResponse: GenerateContentResponse | null = null;
+      let openRouterFailed = false;
 
       // Route to appropriate API
       if (useOpenRouterRef.current) {
-        // Use OpenRouter
-        const response = await sendViaOpenRouter(userMessageWithContext, SYSTEM_INSTRUCTION);
-        const reader = response.body!.getReader();
-        const decoder = new TextDecoder();
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          // Use OpenRouter
+          const response = await sendViaOpenRouter(userMessageWithContext, SYSTEM_INSTRUCTION);
+          const reader = response.body!.getReader();
+          const decoder = new TextDecoder();
           
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              
-              try {
-                const json = JSON.parse(data);
-                const content = json.choices?.[0]?.delta?.content || '';
-                if (content) {
-                  botContent += content;
-                  setActiveSession(prev => {
-                    if (!prev) return null;
-                    const msgExists = prev.messages.some(m => m.id === botMsgId);
-                    if (msgExists) {
-                      return {
-                        ...prev,
-                        messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
-                      };
-                    } else {
-                      return {
-                        ...prev,
-                        messages: [...prev.messages, { id: botMsgId, role: 'bot', content: botContent, timestamp: new Date() }]
-                      };
-                    }
-                  });
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
+                
+                try {
+                  const json = JSON.parse(data);
+                  const content = json.choices?.[0]?.delta?.content || '';
+                  if (content) {
+                    botContent += content;
+                    setActiveSession(prev => {
+                      if (!prev) return null;
+                      const msgExists = prev.messages.some(m => m.id === botMsgId);
+                      if (msgExists) {
+                        return {
+                          ...prev,
+                          messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+                        };
+                      } else {
+                        return {
+                          ...prev,
+                          messages: [...prev.messages, { id: botMsgId, role: 'bot', content: botContent, timestamp: new Date() }]
+                        };
+                      }
+                    });
+                  }
+                } catch (e) {
+                  // Skip parsing errors
                 }
-              } catch (e) {
-                // Skip parsing errors
               }
             }
+          }
+        } catch (error) {
+          // OpenRouter failed, fall back to Gemini
+          openRouterFailed = true;
+          useOpenRouterRef.current = false;
+          botContent = "";
+          
+          // Reinitialize with Gemini
+          const [apiKey, keyNumber, isOpenRouter] = getNextApiKey();
+          if (!apiKey || isOpenRouter) {
+            throw new Error('OpenRouter failed and no Gemini keys available');
+          }
+          const ai = new GoogleGenAI({ apiKey });
+          chatRef.current = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.5, tools: [{ googleSearch: {} }] },
+          });
+          
+          // Continue with Gemini
+          const responseStream = await chatRef.current!.sendMessageStream(messageContent);
+          
+          for await (const chunk of responseStream) {
+            const resp = chunk as GenerateContentResponse;
+            lastResponse = resp;
+            botContent += resp.text || "";
+            setActiveSession(prev => {
+              if (!prev) return null;
+              const msgExists = prev.messages.some(m => m.id === botMsgId);
+              if (msgExists) {
+                return {
+                  ...prev,
+                  messages: prev.messages.map(m => m.id === botMsgId ? { ...m, content: botContent } : m)
+                };
+              } else {
+                return {
+                  ...prev,
+                  messages: [...prev.messages, { id: botMsgId, role: 'bot', content: botContent, timestamp: new Date() }]
+                };
+              }
+            });
           }
         }
       } else {
@@ -690,7 +736,9 @@ DO NOT provide FINAL VERDICT yet.`;
                          errorMessage.includes('RESOURCE_EXHAUSTED') ||
                          errorMessage.includes('exceeded');
       
-      if (isRateLimit && !useOpenRouterRef.current) {
+      // If OpenRouter failed and we already fell back to Gemini in the try block,
+      // don't try to fall back again
+      if (isRateLimit && !useOpenRouterRef.current && !openRouterFailed) {
         // Mark current key as exhausted
         const keyIndex = currentApiKeyIndexRef.current;
         exhaustedKeysRef.current.add(keyIndex);
@@ -720,10 +768,10 @@ DO NOT provide FINAL VERDICT yet.`;
           } : null);
         }
       } else if (useOpenRouterRef.current) {
-        // Backup service error
+        // OpenRouter error (and we couldn't fall back within the block)
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Backup service error. Please try again or contact support.`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Backup service error. Attempting to use primary service. Please try again.`, timestamp: new Date() }]
         } : null);
       } else {
         // Not a rate limit error

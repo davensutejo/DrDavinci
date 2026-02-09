@@ -43,9 +43,8 @@ app.get('/api/health', (req, res) => {
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+    error: 'Internal server error'
   });
 });
 
@@ -57,6 +56,5 @@ initializeDatabase()
     });
   })
   .catch((err) => {
-    console.error('Failed to initialize database:', err);
     process.exit(1);
   });

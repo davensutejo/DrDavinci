@@ -19,7 +19,7 @@ export const storageService = {
         const hashArray = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       } catch (error) {
-        console.warn('Web Crypto API failed, using fallback hash:', error);
+        // Fall back to simple hash
       }
     }
     
@@ -42,7 +42,6 @@ export const storageService = {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : null;
     } catch (e) {
-      console.error(`Error parsing localStorage key "${key}":`, e);
       return null;
     }
   },
@@ -54,7 +53,7 @@ export const storageService = {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {
-      console.error(`Error saving to localStorage key "${key}":`, e);
+      // Storage error
     }
   },
 

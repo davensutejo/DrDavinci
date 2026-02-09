@@ -133,8 +133,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
         }
       }
     } catch (err: any) {
-      console.error('Auth error:', err);
-      setError(err.message || 'An unexpected error occurred. Please try again.');
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }

@@ -28,26 +28,6 @@ export const matchLocalDiseases = (foundSymptomIds: string[]): AnalysisResult[] 
   const filtered = results.filter(res => res.score > 0.15);
   const sorted = filtered.sort((a, b) => b.score - a.score);
   
-  // Only log if there are results
-  if (sorted.length > 0) {
-    console.log('\n' + '='.repeat(80));
-    console.log('🔬 DIFFERENTIAL DIAGNOSIS RESULTS');
-    console.log('='.repeat(80));
-    
-    sorted.forEach((result, idx) => {
-      const medals = ['🥇', '🥈', '🥉'];
-      const medal = medals[idx] || '  ';
-      const matchedCount = result.matchedSymptoms.length;
-      const totalSymptoms = result.disease.symptoms.length;
-      console.log(`${medal} #${idx + 1}: ${result.disease.name} - Score: ${result.score.toFixed(3)} (${matchedCount}/${totalSymptoms} symptoms)`);
-    });
-    
-    console.log('\n' + '🎯'.repeat(40));
-    console.log('FINAL DIAGNOSIS: ' + sorted[0].disease.name.toUpperCase());
-    console.log('Confidence: ' + (sorted[0].score * 100).toFixed(1) + '%');
-    console.log('🎯'.repeat(40) + '\n');
-  }
-
   return sorted;
 };
 

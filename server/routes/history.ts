@@ -63,7 +63,6 @@ router.get('/sessions/:userId', async (req: Request, res: Response) => {
 
     res.json({ sessions: sessionsWithMessages });
   } catch (error: any) {
-    console.error('Get sessions error:', error);
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }
 });
@@ -97,7 +96,6 @@ router.get('/session/:sessionId', async (req: Request, res: Response) => {
 
     res.json({ session, messages: parsedMessages });
   } catch (error: any) {
-    console.error('Get session error:', error);
     res.status(500).json({ error: 'Failed to fetch session' });
   }
 });
@@ -130,7 +128,6 @@ router.post('/session', async (req: Request, res: Response) => {
 
     res.status(201).json({ session: newSession });
   } catch (error: any) {
-    console.error('Create session error:', error);
     res.status(500).json({ error: 'Failed to create session' });
   }
 });
@@ -207,7 +204,6 @@ router.post('/message', async (req: Request, res: Response) => {
 
     res.status(201).json({ message });
   } catch (error: any) {
-    console.error('Save message error:', error);
     res.status(500).json({ error: 'Failed to save message' });
   }
 });
@@ -229,7 +225,6 @@ router.put('/session/:sessionId', async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Update session error:', error);
     res.status(500).json({ error: 'Failed to update session' });
   }
 });
@@ -246,7 +241,6 @@ router.delete('/session/:sessionId', async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Delete session error:', error);
     res.status(500).json({ error: 'Failed to delete session' });
   }
 });
@@ -263,7 +257,6 @@ router.delete('/user/:userId', async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Clear user data error:', error);
     res.status(500).json({ error: 'Failed to clear user data' });
   }
 });

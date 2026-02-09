@@ -137,7 +137,6 @@ router.post('/signup', async (req: Request, res: Response) => {
       expiresIn: 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
     });
   } catch (error: any) {
-    console.error('Signup error:', error);
     res.status(500).json({ error: 'Signup failed' });
   }
 });
@@ -196,7 +195,6 @@ router.post('/login', async (req: Request, res: Response) => {
       expiresIn: 30 * 24 * 60 * 60 * 1000
     });
   } catch (error: any) {
-    console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -229,7 +227,6 @@ router.post('/verify', async (req: Request, res: Response) => {
 
     res.json({ user: userResponse });
   } catch (error: any) {
-    console.error('Verify error:', error);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
@@ -251,7 +248,6 @@ router.post('/logout', async (req: Request, res: Response) => {
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Logout error:', error);
     res.status(500).json({ error: 'Logout failed' });
   }
 });

@@ -44,7 +44,6 @@ export const authService = {
         error: 'Invalid response from server'
       };
     } catch (error: any) {
-      console.error('Signup error:', error);
       return {
         success: false,
         error: error.message || 'An unexpected error occurred during signup'
@@ -85,7 +84,6 @@ export const authService = {
         error: 'Invalid response from server'
       };
     } catch (error: any) {
-      console.error('Login error:', error);
       return {
         success: false,
         error: error.message || 'An unexpected error occurred during login'
@@ -98,7 +96,6 @@ export const authService = {
       const response: any = await apiClient.verifyUser(userId);
       
       if (response.error) {
-        console.error('Verify error:', response.error);
         return null;
       }
 
@@ -108,7 +105,6 @@ export const authService = {
       
       return null;
     } catch (error: any) {
-      console.error('Verify error:', error);
       return null;
     }
   },
@@ -125,7 +121,6 @@ export const authService = {
       const item = localStorage.getItem(SESSION_KEY);
       return item ? JSON.parse(item) : null;
     } catch (e) {
-      console.error('Error parsing current user:', e);
       return null;
     }
   },
@@ -145,7 +140,6 @@ export const authService = {
       
       return token;
     } catch (e) {
-      console.error('Error getting auth token:', e);
       return null;
     }
   },

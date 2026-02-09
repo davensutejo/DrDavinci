@@ -23,15 +23,13 @@ if (!isVercel && dbPath !== ':memory:') {
       fs.mkdirSync(dataDir, { recursive: true });
     }
   } catch (err) {
-    console.error('Error creating data directory:', err);
+    // Directory creation failed
   }
 }
 
 const db = new sqlite3.Database(dbPath, (err: any) => {
   if (err) {
-    console.error('Error opening database:', err);
-  } else {
-    console.log('Connected to SQLite database at:', dbPath);
+    console.error('Database connection error');
   }
 });
 
@@ -55,7 +53,7 @@ export function initializeDatabase(): Promise<void> {
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `, (err: any) => {
-        if (err) console.error('Error creating users table:', err);
+        // Error handling
       });
 
       // Add columns to existing users table if they don't exist (for backwards compatibility)
@@ -91,7 +89,7 @@ export function initializeDatabase(): Promise<void> {
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
       `, (err: any) => {
-        if (err) console.error('Error creating chat_sessions table:', err);
+        // Error handling
       });
 
       // Messages table
@@ -110,10 +108,8 @@ export function initializeDatabase(): Promise<void> {
         )
       `, (err: any) => {
         if (err) {
-          console.error('Error creating messages table:', err);
           reject(err);
         } else {
-          console.log('Database initialized successfully');
           resolve();
         }
       });

@@ -95,14 +95,10 @@ const App: React.FC = () => {
     process.env.API_KEY_BACKUP_5,
   ].filter(Boolean) as string[];
   
-  // Log available keys on mount for debugging
+  // API keys configured securely
   useEffect(() => {
-    console.log(`✅ Available API Keys: ${GEMINI_API_KEYS.length} Gemini + ${process.env.OPENROUTER_API_KEY ? '1 OpenRouter' : '0 OpenRouter'}`);
-    GEMINI_API_KEYS.forEach((key, idx) => {
-      console.log(`   Key #${idx + 1}: ${key?.substring(0, 20)}...${key?.substring(key.length - 10)}`);
-    });
-    if (process.env.OPENROUTER_API_KEY) {
-      console.log(`   OpenRouter: ${process.env.OPENROUTER_API_KEY.substring(0, 20)}...`);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`API configuration ready`);
     }
   }, []);
   
@@ -137,14 +133,13 @@ const App: React.FC = () => {
     
     // All Gemini keys exhausted, check for OpenRouter
     if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
-      console.warn('🔄 All Gemini keys exhausted. Switching to OpenRouter fallback...');
       useOpenRouterRef.current = true;
       return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
     }
     
     // If all keys exhausted, show them we tried OpenRouter
     if (useOpenRouterRef.current && !process.env.OPENROUTER_API_KEY) {
-      console.error('❌ OpenRouter API key not configured!');
+      // OpenRouter not configured
     }
     
     // If all exhausted, reset and start from beginning
@@ -220,7 +215,6 @@ const App: React.FC = () => {
 
       try {
         if (!isOpenRouter) {
-          console.log(`🔑 Initializing with Google Gemini Key #${keyNumber}/${GEMINI_API_KEYS.length}`);
           const ai = new GoogleGenAI({ apiKey });
           chatRef.current = ai.chats.create({
             model: 'gemini-2.5-flash',
@@ -231,11 +225,10 @@ const App: React.FC = () => {
             },
           });
         } else {
-          console.log(`🔄 Switching to OpenRouter (Gemini 2.5 Flash Preview)`);
           chatRef.current = null; // Will use OpenRouter
         }
       } catch (err: any) {
-        console.error("Failed to initialize AI:", err);
+        // AI initialization failed
         setConfigError(`Failed to initialize medical engine: ${err?.message || err?.toString() || 'Unknown error'}`);
       }
     }
@@ -312,7 +305,6 @@ const App: React.FC = () => {
       };
       
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
         setIsRecording(false);
         if (event.error === 'not-allowed') {
           alert('Microphone access denied. Please allow microphone access in your browser settings.');
@@ -353,9 +345,8 @@ const App: React.FC = () => {
     try { 
       recognitionRef.current.start(); 
     } catch (e: any) {
-      console.error('Failed to start speech recognition:', e);
-      setIsRecording(false);
-      if (e.message?.includes('already started')) {
+        setIsRecording(false);
+       (e.message?.includes('already started')) {
         recognitionRef.current.stop();
         setTimeout(() => recognitionRef.current.start(), 100);
       }
@@ -383,14 +374,11 @@ const App: React.FC = () => {
       }
       
       if (!isOpenRouter) {
-        console.log(`🔑 Initializing with Google Gemini Key #${keyNumber}/${GEMINI_API_KEYS.length}`);
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
           model: 'gemini-2.5-flash',
           config: { systemInstruction: SYSTEM_INSTRUCTION, temperature: 0.5, tools: [{ googleSearch: {} }] },
         });
-      } else {
-        console.log(`🔄 Switching to OpenRouter (Gemini 2.5 Flash Preview)`);
       }
     }
 
@@ -537,14 +525,12 @@ const App: React.FC = () => {
               current ? { ...current, id: realSessionId } : null
             );
           }
-          // Refresh sessions AFTER save completes to avoid duplicates
-          refreshSessions().catch(console.error);
-        }).catch(console.error);
+        });
         
         return newSession;
       });
     } catch (error: any) {
-      console.error("API Error:", error);
+      const sanitizedError = error instanceof Error ? error.message : 'An error occurred';
       const errorMessage = error?.message || error?.toString() || "Unknown error";
       const errorDetails = error?.status ? ` (Status: ${error.status})` : "";
       
@@ -564,42 +550,38 @@ const App: React.FC = () => {
         
         if (isOpenRouter) {
           // Switch to OpenRouter
-          console.warn(`⚠️ All ${GEMINI_API_KEYS.length} Gemini free tier keys exhausted. Attempting OpenRouter...`);
           chatRef.current = null; // Reset chat
           
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier API keys have reached their daily quota. Switching to OpenRouter backup (using your credits). Please try your request again.`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API quota limit reached. Switching to backup service. Please try your request again.`, timestamp: new Date() }]
           } : null);
         } else if (nextKeyNumber !== keyIndex + 1) {
-          // Rotated to a different Gemini key
-          console.warn(`⚠️ Gemini Key #${keyIndex + 1} rate limited. Rotating to Key #${nextKeyNumber}/${GEMINI_API_KEYS.length}`);
+          // Rotated to a different API key
           chatRef.current = null; // Reset chat to reinitialize with new key
           
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API Key #${keyIndex + 1} hit its daily quota. Switched to backup key #${nextKeyNumber}. Please try again.`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API quota limit reached. Switched to backup service. Please try again.`, timestamp: new Date() }]
           } : null);
         } else {
           // All exhausted and no OpenRouter
-          console.warn('⚠️ All API providers exhausted');
           setActiveSession(prev => prev ? {
             ...prev,
-            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${GEMINI_API_KEYS.length} free tier Gemini keys have been exhausted. Quota resets in 24 hours. ${process.env.OPENROUTER_API_KEY ? 'OpenRouter is configured but currently unavailable.' : 'Configure OpenRouter API key for unlimited fallback access.'}`, timestamp: new Date() }]
+            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `API quota limit reached. Please try again later or contact support.`, timestamp: new Date() }]
           } : null);
         }
       } else if (useOpenRouterRef.current) {
-        // OpenRouter error
-        console.error('OpenRouter Error:', error);
+        // Backup service error
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `OpenRouter error: ${errorMessage}. Your OpenRouter credits may be exhausted. Check your account at openrouter.ai`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Backup service error. Please try again or contact support.`, timestamp: new Date() }]
         } : null);
       } else {
         // Not a rate limit error
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine: ${errorMessage}${errorDetails}. Please verify your API keys and connection.`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine. Please try again.`, timestamp: new Date() }]
         } : null);
       }
     } finally {

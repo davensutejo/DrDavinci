@@ -11,7 +11,6 @@ export const historyService = {
       const response: any = await apiClient.getSessions(userId);
       
       if (response.error) {
-        console.error('Get sessions error:', response.error);
         return [];
       }
 
@@ -39,7 +38,6 @@ export const historyService = {
       
       return [];
     } catch (error) {
-      console.error('Get sessions error:', error);
       return [];
     }
   },
@@ -52,7 +50,6 @@ export const historyService = {
       const response: any = await apiClient.getSession(sessionId);
       
       if (response.error) {
-        console.error('Get session error:', response.error);
         return undefined;
       }
 
@@ -77,7 +74,6 @@ export const historyService = {
       
       return undefined;
     } catch (error) {
-      console.error('Get session error:', error);
       return undefined;
     }
   },
@@ -158,7 +154,6 @@ export const historyService = {
 
       return sessionId;
     } catch (error) {
-      console.error('Save session error:', error);
       return null;
     }
   },
@@ -170,7 +165,6 @@ export const historyService = {
     try {
       await apiClient.deleteSession(sessionId);
     } catch (error) {
-      console.error('Delete session error:', error);
     }
   },
 
@@ -181,7 +175,7 @@ export const historyService = {
     try {
       await apiClient.clearUserData(userId);
     } catch (error) {
-      console.error('Clear user data error:', error);
+      // Clearance failed
     }
   }
 };

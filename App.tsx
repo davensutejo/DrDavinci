@@ -84,7 +84,19 @@ const App: React.FC = () => {
   const chatRef = useRef<Chat | null>(null);
   const finalTranscriptRef = useRef<string>(''); // Track final transcript to avoid duplicates
   const lastProcessedIndexRef = useRef<number>(0); // Track last processed result index
-  const currentApiKeyRef = useRef<string>(process.env.API_KEY || ''); // Track current API key being used
+  
+  // API Key rotation system - 6 keys total (1 primary + 5 backups)
+  const API_KEYS = [
+    process.env.API_KEY,
+    process.env.API_KEY_BACKUP,
+    process.env.API_KEY_BACKUP_2,
+    process.env.API_KEY_BACKUP_3,
+    process.env.API_KEY_BACKUP_4,
+    process.env.API_KEY_BACKUP_5,
+  ].filter(Boolean) as string[];
+  
+  const currentApiKeyIndexRef = useRef<number>(0); // Track which key we're using
+  const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted keys
 
   // Sync session list on load or user change
   const refreshSessions = useCallback(async () => {
@@ -99,6 +111,23 @@ const App: React.FC = () => {
     }
     return [];
   }, [currentUser]);
+
+  // Get next available API key (rotate through all 6)
+  const getNextApiKey = useCallback((): [string, number] => {
+    // Find next key that hasn't been exhausted
+    for (let i = 0; i < API_KEYS.length; i++) {
+      const nextIndex = (currentApiKeyIndexRef.current + i) % API_KEYS.length;
+      if (!exhaustedKeysRef.current.has(nextIndex)) {
+        currentApiKeyIndexRef.current = nextIndex;
+        return [API_KEYS[nextIndex], nextIndex + 1];
+      }
+    }
+    
+    // If all keys exhausted, reset and start from the beginning (with warning)
+    exhaustedKeysRef.current.clear();
+    currentApiKeyIndexRef.current = 0;
+    return [API_KEYS[0], 1];
+  }, [API_KEYS]);
 
   // Handle New Chat creation
   const startNewChat = useCallback(() => {
@@ -127,13 +156,14 @@ const App: React.FC = () => {
   // Initialize Chat Engine when session changes
   useEffect(() => {
     if (currentUser && activeSession && activeSession.id !== 'new') {
-      const apiKey = currentApiKeyRef.current || process.env.API_KEY;
+      const [apiKey, keyNumber] = getNextApiKey();
       if (!apiKey) {
-        setConfigError("API Key is missing. Please configure API_KEY in your environment settings.");
+        setConfigError("No API keys available. Please configure at least one GEMINI_API_KEY.");
         return;
       }
 
       try {
+        console.log(`🔑 Initializing with API Key #${keyNumber}/${API_KEYS.length}`);
         const ai = new GoogleGenAI({ apiKey });
         chatRef.current = ai.chats.create({
           model: 'gemini-2.5-flash',
@@ -148,7 +178,7 @@ const App: React.FC = () => {
         setConfigError(`Failed to initialize medical engine: ${err?.message || err?.toString() || 'Unknown error'}`);
       }
     }
-  }, [activeSession?.id, currentUser]);
+  }, [activeSession?.id, currentUser, getNextApiKey, API_KEYS.length]);
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -285,11 +315,12 @@ const App: React.FC = () => {
     if ((!input.trim() && !selectedImage) || !currentUser || !activeSession) return;
     
     if (!chatRef.current) {
-      const apiKey = currentApiKeyRef.current || process.env.API_KEY;
+      const [apiKey, keyNumber] = getNextApiKey();
       if (!apiKey) {
-        setConfigError("Cannot send message: API Key is missing.");
+        setConfigError("No API keys available. Please configure at least one GEMINI_API_KEY.");
         return;
       }
+      console.log(`🔑 Initializing with API Key #${keyNumber}/${API_KEYS.length}`);
       const ai = new GoogleGenAI({ apiKey });
       chatRef.current = ai.chats.create({
         model: 'gemini-2.5-flash',
@@ -408,30 +439,51 @@ const App: React.FC = () => {
       const errorMessage = error?.message || error?.toString() || "Unknown error";
       const errorDetails = error?.status ? ` (Status: ${error.status})` : "";
       
-      // Check if it's a rate limit error and we have a backup key
-      const isRateLimit = error?.status === 429 || errorMessage.includes('429') || 
-                         errorMessage.includes('rate') || errorMessage.includes('quota') ||
-                         errorMessage.includes('RESOURCE_EXHAUSTED');
+      // Check if it's a rate limit error (429 or RESOURCE_EXHAUSTED)
+      const isRateLimit = error?.status === 429 || 
+                         errorMessage.includes('429') || 
+                         errorMessage.includes('rate') || 
+                         errorMessage.includes('quota') ||
+                         errorMessage.includes('RESOURCE_EXHAUSTED') ||
+                         errorMessage.includes('exceeded');
       
-      if (isRateLimit && process.env.API_KEY_BACKUP && currentApiKeyRef.current !== process.env.API_KEY_BACKUP) {
-        console.warn('⚠️ API rate limit hit on primary key. Switching to backup key...');
-        currentApiKeyRef.current = process.env.API_KEY_BACKUP;
-        chatRef.current = null; // Reset chat to reinitialize with backup key
+      if (isRateLimit) {
+        // Mark current key as exhausted
+        const keyIndex = currentApiKeyIndexRef.current;
+        exhaustedKeysRef.current.add(keyIndex);
+        const [nextKey, nextKeyNumber] = getNextApiKey();
         
-        setActiveSession(prev => prev ? {
-          ...prev,
-          messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: "The primary API reached its rate limit. I've switched to a backup API key. Please try your request again.", timestamp: new Date() }]
-        } : null);
+        if (nextKeyNumber !== keyIndex + 1) {
+          // We've rotated to a different key
+          console.warn(`⚠️ API Key #${keyIndex + 1} rate limited. Rotating to Key #${nextKeyNumber}/${API_KEYS.length}`);
+          chatRef.current = null; // Reset chat to reinitialize with new key
+          
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Current API key hit the daily quota limit. Automatically switched to backup key #${nextKeyNumber}. Please try your request again.`, timestamp: new Date() }]
+          } : null);
+        } else {
+          // All keys are exhausted
+          const allExhausted = exhaustedKeysRef.current.size === API_KEYS.length;
+          if (allExhausted) {
+            console.warn('⚠️ All API keys have hit their daily quota (free tier limit: 20 requests/day)');
+            setActiveSession(prev => prev ? {
+              ...prev,
+              messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All ${API_KEYS.length} API keys have reached their daily quota limit (20 requests/day for free tier). Your quota will reset in 24 hours. To continue using the service without waiting, please upgrade to a paid plan at https://console.cloud.google.com`, timestamp: new Date() }]
+            } : null);
+          }
+        }
       } else {
+        // Not a rate limit error
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine: ${errorMessage}${errorDetails}. Please verify your API key and connection.`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine: ${errorMessage}${errorDetails}. Please verify your API keys and connection.`, timestamp: new Date() }]
         } : null);
       }
     } finally {
       setIsTyping(false);
     }
-  }, [input, selectedImage, currentUser, activeSession, refreshSessions]);
+  }, [input, selectedImage, currentUser, activeSession, refreshSessions, getNextApiKey, API_KEYS.length]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

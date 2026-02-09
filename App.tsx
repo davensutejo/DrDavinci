@@ -106,6 +106,34 @@ const App: React.FC = () => {
   const currentApiKeyIndexRef = useRef<number>(0); // Track which Gemini key we're using
   const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted Gemini keys
   const useOpenRouterRef = useRef<boolean>(false); // Track if using OpenRouter fallback
+  const conversationStateRef = useRef<ConversationState>({
+    questionCount: 0,
+    maxQuestions: 3,
+    symptomHistory: [],
+    diagnosticPhase: 'initial'
+  }); // Track conversation state
+
+  /**
+   * Count total symptoms from all user messages in the session
+   */
+  const countTotalUserSymptoms = useCallback((messages: Message[]): number => {
+    const allSymptomIds = new Set<string>();
+    
+    messages.forEach(msg => {
+      if (msg.role === 'user' && msg.extractedSymptoms) {
+        msg.extractedSymptoms.forEach(symptomId => allSymptomIds.add(symptomId));
+      }
+    });
+    
+    return allSymptomIds.size;
+  }, []);
+
+  /**
+   * Determine if we have enough symptoms to show verdict (3+)
+   */
+  const shouldShowVerdict = useCallback((messages: Message[]): boolean => {
+    return countTotalUserSymptoms(messages) >= 3;
+  }, [countTotalUserSymptoms]);
 
   // Sync session list on load or user change
   const refreshSessions = useCallback(async () => {
@@ -389,12 +417,16 @@ const App: React.FC = () => {
     setInput('');
     setSelectedImage(null);
 
+    // Extract symptoms from user input BEFORE creating message
+    const userSymptomIds = extractSymptoms(userText);
+
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
       content: userText || (currentImg ? "Medical image attached for analysis." : ""),
       imageUrl: currentImg?.preview,
-      timestamp: new Date()
+      timestamp: new Date(),
+      extractedSymptoms: userSymptomIds  // Store extracted symptoms in user message
     };
 
     const updatedMessages = [...activeSession.messages, userMsg];
@@ -490,7 +522,10 @@ const App: React.FC = () => {
         }
       }
 
+      // Extract and count total symptoms from entire conversation
       const foundSymptomIds = extractSymptoms(userText);
+      const totalSymptomCount = countTotalUserSymptoms(updatedMessages);
+      
       let results = matchLocalDiseases(foundSymptomIds);
 
       // Blend AI confidence with local scores
@@ -517,7 +552,7 @@ const App: React.FC = () => {
               results: results.length > 0 ? results : undefined,
               extractedSymptoms: foundSymptomIds,
               groundingSources: groundingSources.length > 0 ? groundingSources : undefined,
-              verdicts: verdicts.length > 0 ? verdicts : undefined
+              verdicts: verdicts.length > 0 ? verdicts : undefined  // Only set if verdicts were extracted
             } : m
           )
         };
@@ -728,7 +763,7 @@ const App: React.FC = () => {
                     {msg.verdicts && msg.verdicts.length > 0 && (
                       <VerdictCard verdicts={msg.verdicts} />
                     )}
-                    {msg.results && (
+                    {(!msg.verdicts || msg.verdicts.length === 0) && msg.results && (
                       <div className="mt-6 pt-5 border-t border-slate-100">
                         <DiagnosisResult results={msg.results} />
                       </div>

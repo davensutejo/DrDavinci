@@ -4,7 +4,12 @@ import { AnalysisResult, VerdictDiagnosis } from '../types';
 
 /**
  * Parses AI response to extract structured verdicts with confidence scores.
- * Looks for pattern: "Disease Name: XX% confidence - reasoning"
+ * Looks for pattern: "- Disease Name: XX% confidence - reasoning"
+ * 
+ * Multiple matching patterns supported for robustness:
+ * Pattern 1: "- Disease Name: 85% confidence - reasoning"
+ * Pattern 2: "- Disease Name: 85% - reasoning" (without "confidence" word)
+ * Pattern 3: "Disease Name: 85% confidence - reasoning" (without dash)
  * 
  * @param responseText - The AI response text
  * @returns Array of parsed verdicts with confidence scores
@@ -12,28 +17,52 @@ import { AnalysisResult, VerdictDiagnosis } from '../types';
 export const extractVerdictsFromResponse = (responseText: string): VerdictDiagnosis[] => {
   const verdicts: VerdictDiagnosis[] = [];
   
-  // Pattern: "- Disease Name: X% confidence - reasoning"
-  const verdictPattern = /(?:^|\n)\s*-?\s*([^:]+):\s*(\d+)%\s*confidence\s*(?:-\s*(.+?))?(?=\n|$)/gi;
-  let match;
+  if (!responseText || responseText.trim().length === 0) return verdicts;
   
+  // Pattern: "- Disease Name: XX% confidence - reasoning"
+  // Handles multiple variations:
+  // - Optional leading dash and spaces
+  // - Disease name (allows parentheses, spaces)
+  // - Colon
+  // - Number + percent sign
+  // - Optional "confidence" word
+  // - Optional dash and reasoning
+  const verdictPattern = /^[\s\-]*([\w\s\(\)]+?):\s*(\d+)%\s*(?:confidence)?\s*(?:-\s*(.+?))?$/gmi;
+  
+  let match;
   let rank = 1;
+  const processedDiseases = new Set<string>(); // Track to avoid duplicates
+  
   while ((match = verdictPattern.exec(responseText)) !== null) {
     const disease = match[1].trim();
     const confidence = parseInt(match[2], 10);
     const reasoning = match[3]?.trim() || 'See clinical analysis';
     
-    // Validate confidence is in range
-    if (confidence >= 0 && confidence <= 100 && disease.length > 0) {
-      verdicts.push({
-        disease,
-        confidence,
-        reasoning,
-        rank: rank++
-      });
+    // Validate disease name isn't empty and confidence is in range
+    if (disease && disease.length > 2 && confidence >= 0 && confidence <= 100) {
+      // Skip if duplicate disease name
+      const diseaseKey = disease.toLowerCase();
+      if (!processedDiseases.has(diseaseKey)) {
+        processedDiseases.add(diseaseKey);
+        
+        verdicts.push({
+          disease,
+          confidence,
+          reasoning,
+          rank: rank++
+        });
+      }
     }
   }
   
-  // If no structured verdicts found, return empty array for fallback handling
+  // Sort by confidence descending to ensure proper ranking
+  verdicts.sort((a, b) => b.confidence - a.confidence);
+  
+  // Re-assign rank based on sorted order
+  verdicts.forEach((v, index) => {
+    v.rank = index + 1;
+  });
+  
   return verdicts;
 };
 

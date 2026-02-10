@@ -16,7 +16,7 @@ import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
 
-const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
+const MarkdownText: React.FC<{ content: string; isUserMessage?: boolean }> = ({ content, isUserMessage = false }) => {
   if (!content.trim()) return null;
 
   function parseInline(text: string) {
@@ -31,9 +31,9 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
       }
       
       if (match[1].startsWith('**')) {
-        items.push(<strong key={match.index} className="font-semibold text-slate-900">{match[2]}</strong>);
+        items.push(<strong key={match.index} className={`font-semibold ${isUserMessage ? 'text-white' : 'text-slate-900'}`}>{match[2]}</strong>);
       } else {
-        items.push(<span key={match.index} className="inline-flex items-center justify-center bg-teal-100 text-teal-800 text-[10px] font-bold w-4 h-4 rounded-full mx-0.5 align-top mt-0.5">{match[3]}</span>);
+        items.push(<span key={match.index} className={`inline-flex items-center justify-center ${isUserMessage ? 'bg-teal-400 text-teal-900' : 'bg-teal-100 text-teal-800'} text-[10px] font-bold w-4 h-4 rounded-full mx-0.5 align-top mt-0.5`}>{match[3]}</span>);
       }
       
       lastIndex = combinedRegex.lastIndex;
@@ -76,17 +76,17 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
     // Headers
     if (trimmed.startsWith('#### ')) {
       flushList();
-      parts.push(<h4 key={i} className="text-xs font-bold text-slate-700 uppercase tracking-wider mt-3 mb-2">{parseInline(trimmed.substring(5))}</h4>);
+      parts.push(<h4 key={i} className={`text-xs font-bold ${isUserMessage ? 'text-white' : 'text-slate-700'} uppercase tracking-wider mt-3 mb-2`}>{parseInline(trimmed.substring(5))}</h4>);
       return;
     }
     if (trimmed.startsWith('### ')) {
       flushList();
-      parts.push(<h3 key={i} className="text-sm font-bold text-teal-700 uppercase tracking-widest mt-4 mb-3 pb-2 border-b-2 border-teal-200">{parseInline(trimmed.substring(4))}</h3>);
+      parts.push(<h3 key={i} className={`text-sm font-bold ${isUserMessage ? 'text-white' : 'text-teal-700'} uppercase tracking-widest mt-4 mb-3 pb-2 ${isUserMessage ? 'border-white' : 'border-teal-200'} border-b-2`}>{parseInline(trimmed.substring(4))}</h3>);
       return;
     }
     if (trimmed.startsWith('## ')) {
       flushList();
-      parts.push(<h2 key={i} className="text-base font-bold text-teal-800 uppercase tracking-widest mt-5 mb-3 pb-2.5 border-b-2 border-teal-300">{parseInline(trimmed.substring(3))}</h2>);
+      parts.push(<h2 key={i} className={`text-base font-bold ${isUserMessage ? 'text-white' : 'text-teal-800'} uppercase tracking-widest mt-5 mb-3 pb-2.5 ${isUserMessage ? 'border-white' : 'border-teal-300'} border-b-2`}>{parseInline(trimmed.substring(3))}</h2>);
       return;
     }
 
@@ -97,7 +97,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         listType = 'ul';
       }
       const text = trimmed.substring(2);
-      listItems.push(<li key={i} className="text-sm leading-relaxed text-slate-700">{parseInline(text)}</li>);
+      listItems.push(<li key={i} className={`text-sm leading-relaxed ${isUserMessage ? 'text-white' : 'text-slate-700'}`}>{parseInline(text)}</li>);
       return;
     }
 
@@ -108,14 +108,14 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
         listType = 'ol';
       }
       const text = trimmed.substring(trimmed.indexOf('.') + 1).trim();
-      listItems.push(<li key={i} className="text-sm leading-relaxed text-slate-700">{parseInline(text)}</li>);
+      listItems.push(<li key={i} className={`text-sm leading-relaxed ${isUserMessage ? 'text-white' : 'text-slate-700'}`}>{parseInline(text)}</li>);
       return;
     }
 
     // Regular paragraphs
     flushList();
     if (trimmed) {
-      parts.push(<p key={i} className="mb-3 text-slate-700 leading-relaxed text-sm">{parseInline(trimmed)}</p>);
+      parts.push(<p key={i} className={`mb-3 ${isUserMessage ? 'text-white' : 'text-slate-700'} leading-relaxed text-sm`}>{parseInline(trimmed)}</p>);
     }
   });
 
@@ -918,7 +918,7 @@ Focus on deepening understanding of what they actually reported.`;
                         <img src={msg.imageUrl} alt="Submission" className="w-full max-h-72 object-cover" />
                       </div>
                     )}
-                    <MarkdownText content={msg.content} />
+                    <MarkdownText content={msg.content} isUserMessage={msg.role === 'user'} />
                     {msg.groundingSources && (
                       <div className="mt-6 pt-5 border-t-2 border-slate-100">
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-4">🔗 Clinical References</span>

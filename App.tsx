@@ -127,7 +127,7 @@ const MarkdownText: React.FC<{ content: string }> = ({ content }) => {
 const WELCOME_MESSAGE = (name: string): Message => ({
   id: 'welcome',
   role: 'bot',
-  content: `Hello **${name}**, I'm **Dr. Davinci**. How are you feeling today? Please describe your symptoms or share an image of your concern.`,
+  content: `Hello **${name}**, I'm **Dr. Davinci**. How are you feeling today? Please describe your symptoms.`,
   timestamp: new Date()
 });
 
@@ -972,21 +972,7 @@ Focus on deepening understanding of what they actually reported.`;
 
         <footer className="flex-shrink-0 bg-white border-t border-slate-200 z-50">
           <div className="max-w-4xl mx-auto w-full p-2 md:p-4">
-            {selectedImage && (
-              <div className="mb-2 flex px-2">
-                <div className="relative">
-                  <img src={selectedImage.preview} className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border-2 border-teal-500 shadow-md" />
-                  <button onClick={() => setSelectedImage(null)} className="absolute -top-2 -right-2 bg-slate-900 text-white p-1 rounded-full"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg></button>
-                </div>
-              </div>
-            )}
-
             <div className="bg-slate-50 border border-slate-200 rounded-[28px] md:rounded-[36px] p-1.5 shadow-sm flex items-center gap-1 md:gap-2 ring-1 ring-black/5 focus-within:ring-4 focus-within:ring-teal-500/10 transition-all duration-300">
-              <button onClick={() => fileInputRef.current?.click()} className="h-11 w-11 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-full transition-all duration-200 hover:scale-110 active:scale-90">
-                <svg className="w-6 h-6 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-              </button>
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-
               <textarea
                 rows={1}
                 value={input}
@@ -995,11 +981,6 @@ Focus on deepening understanding of what they actually reported.`;
                 placeholder="Describe symptoms..."
                 className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-[16px] py-[10px] px-1 resize-none max-h-32 min-h-[44px] placeholder-slate-400 leading-6"
               />
-
-              <button onClick={toggleRecording} className={`h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 relative active:scale-95 hover:scale-110 ${isRecording ? 'text-red-600 bg-red-50' : 'text-slate-400 hover:text-teal-600 hover:bg-teal-50'}`}>
-                {isRecording && <span className="absolute inset-0 rounded-full bg-red-400/20 animate-ping"></span>}
-                <svg className={`w-6 h-6 ${isRecording ? 'animate-pulse' : 'transition-transform duration-300'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
-              </button>
 
               <button onClick={handleSend} disabled={(!input.trim() && !selectedImage) || isTyping} className={`h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 ${(!input.trim() && !selectedImage) || isTyping ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-500/40 hover:scale-110 shadow-md shadow-teal-500/20'}`}>
                 <svg className="w-5 h-5 translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>

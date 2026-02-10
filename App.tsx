@@ -505,11 +505,13 @@ const App: React.FC = () => {
         .map(id => SYMPTOMS_DB.find(s => s.id === id)?.label || id)
         .join(', ');
       
-      // Build conversation history so Gemini remembers what was said before
+      // Build conversation history so AI remembers the FULL conversation (both patient and doctor)
       const conversationHistory = updatedMessages
-        .slice(0, -1) // Exclude the message we just added
-        .filter(m => m.role === 'user')
-        .map(m => `- ${m.content}`)
+        .slice(0, -1) // Exclude the current message we just added
+        .map(m => {
+          const role = m.role === 'user' ? 'Patient' : 'Dr. Davinci';
+          return `${role}: ${m.content}`;
+        })
         .join('\n');
       
       // Create preamble with full context - this is what forces Gemini to act right
@@ -523,7 +525,7 @@ NEVER mention or base diagnosis on other symptoms.
 NEVER assume they have additional symptoms.
 NEVER say "I see you also have..." for symptoms not in the list above.
 
-Patient's actual messages:
+FULL CONVERSATION SO FAR:
 ${conversationHistory}
 
 NEW INFORMATION: ${userText || "Image attached"}
@@ -544,13 +546,14 @@ ${symptomLabels || 'None reported yet'}
 DO NOT invent or assume other symptoms.
 DO NOT mention symptoms they didn't report.
 
-Patient's messages:
+FULL CONVERSATION SO FAR:
 ${conversationHistory}
 
 NEW UPDATE: ${userText || "Image attached"}
 
 Ask clarifying questions about severity, duration, or context of these ${totalSymptomCount} symptoms.
 DO NOT ask about different symptoms they never mentioned.
+DO NOT repeat questions already asked - you can see the full conversation above.
 Focus on deepening understanding of what they actually reported.`;
       }
       

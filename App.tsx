@@ -11,7 +11,7 @@ import VerdictCard from './components/VerdictCard';
 import TreatmentPlanComponent from './components/TreatmentPlan';
 import { SYSTEM_INSTRUCTION, SYMPTOMS_DB } from './constants';
 import { extractSymptoms } from './services/nlpService';
-import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse, accumulateAllSymptoms, cleanBotResponse } from './services/inferenceService';
+import { matchLocalDiseases, blendScoresWithAI, extractAIConfidence, extractVerdictsFromResponse, accumulateAllSymptoms, cleanBotResponse, validateAIResponse } from './services/inferenceService';
 import { authService } from './services/authService';
 import { historyService } from './services/historyService';
 import { generateUUID } from './utils/uuid';
@@ -515,35 +515,43 @@ const App: React.FC = () => {
       // Create preamble with full context - this is what forces Gemini to act right
       let symptomCountPreamble: string;
       if (totalSymptomCount >= 3) {
-        symptomCountPreamble = `[CRITICAL INSTRUCTION - PATIENT HAS ${totalSymptomCount} DISTINCT SYMPTOMS]
-Accumulated symptoms: ${symptomLabels}
+        symptomCountPreamble = `[CRITICAL: ONLY USE THESE REPORTED SYMPTOMS FOR DIAGNOSIS]
+The ONLY symptoms the patient has reported are:
+${symptomLabels}
 
-Patient's messages:
+NEVER mention or base diagnosis on other symptoms.
+NEVER assume they have additional symptoms.
+NEVER say "I see you also have..." for symptoms not in the list above.
+
+Patient's actual messages:
 ${conversationHistory}
 
-CURRENT UPDATE: ${userText || "Image attached"}
+NEW INFORMATION: ${userText || "Image attached"}
 
-YOU MUST NOW PROVIDE A FINAL VERDICT SECTION with specific disease names and confidence percentages.
-DO NOT ask more questions. DO NOT repeat back symptoms. Provide the verdict.
+YOU MUST NOW PROVIDE A FINAL VERDICT using ONLY the symptoms above.
+Based on these ${totalSymptomCount} symptoms alone, what are the most likely diagnoses?
 
 Format:
 [FINAL VERDICT]
-- Disease Name: XX% confidence - reasoning
-- Disease Name: XX% confidence - reasoning
+- Disease Name: XX% confidence - how this matches ONLY the symptoms listed above
+- Disease Name: XX% confidence - how this matches ONLY the symptoms listed above
 [/FINAL VERDICT]`;
       } else {
         symptomCountPreamble = `[PATIENT HAS ${totalSymptomCount}/${3} SYMPTOMS NEEDED FOR VERDICT]
-Current symptoms: ${symptomLabels || 'None reported yet'}
+These are the ONLY symptoms reported so far:
+${symptomLabels || 'None reported yet'}
+
+DO NOT invent or assume other symptoms.
+DO NOT mention symptoms they didn't report.
 
 Patient's messages:
 ${conversationHistory}
 
 NEW UPDATE: ${userText || "Image attached"}
 
-Continue asking clarifying questions to understand the patient better.
-DO NOT ask about symptoms the patient already mentioned: ${symptomLabels || 'none yet'}
-Focus on gathering more information.
-DO NOT provide FINAL VERDICT yet.`;
+Ask clarifying questions about severity, duration, or context of these ${totalSymptomCount} symptoms.
+DO NOT ask about different symptoms they never mentioned.
+Focus on deepening understanding of what they actually reported.`;
       }
       
       // Construct the actual user message with full context
@@ -693,6 +701,12 @@ DO NOT provide FINAL VERDICT yet.`;
       
       // Clean response content to remove verdict markers for clean display
       const cleanedContent = cleanBotResponse(botContent);
+
+      // Validate that AI only mentioned reported symptoms (prevent hallucation)
+      const validation = validateAIResponse(botContent, allAccumulatedSymptoms);
+      if (!validation.isValid && validation.hallucinatedSymptoms.length > 0) {
+        console.warn('⚠️ AI hallucinated symptoms:', validation.hallucinatedSymptoms, 'Not in reported:', allAccumulatedSymptoms);
+      }
 
       setActiveSession(prev => {
         if (!prev) return null;

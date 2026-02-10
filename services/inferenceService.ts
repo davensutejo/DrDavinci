@@ -35,11 +35,9 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   
   if (!responseText || responseText.trim().length === 0) return verdicts;
   
-  // Pattern: "- Disease Name: XX% confidence - reasoning" or ANY LANGUAGE equivalent
-  // Matches: "- Nom Maladie: XX% confiance - raison" (French)
-  // Matches: "- Nombre Enfermedad: XX% confianza - razón" (Spanish)
-  // Language-independent: matches any characters before colon
-  const verdictPattern = /^[\s\-]*([^:]+?):\s*(\d+)%\s*(?:[-–]\s*(.+?))?$/gmi;
+  // Pattern: "- Disease Name: XX% confidence - reasoning"
+  // Or: "Disease Name: XX% - reasoning"
+  const verdictPattern = /^[\s\-]*([\w\s\(\),&\.]+?):\s*(\d+)%\s*(?:confidence)?\s*(?:-\s*(.+?))?$/gmi;
   
   let match;
   let rank = 1;
@@ -76,8 +74,7 @@ export const extractVerdictsFromResponse = (responseText: string): VerdictDiagno
   });
   
   // Extract sources from [1] Organization (https://url) - Description format
-  // Language-independent: [1] ANY TEXT (https://...) - Description
-  const sourcesPattern = /\[(\d+)\]\s*([^\(]+?)\s*\((https?:\/\/[^\)]+)\)\s*[-–]\s*([^\n]+)/g;
+  const sourcesPattern = /\[(\d+)\]\s*([A-Za-z\s&]+?)\s*\((https?:\/\/[^\)]+)\)\s*-\s*([^\n]+)/g;
   const sources: EvidenceSource[] = [];
   let sourceMatch;
   while ((sourceMatch = sourcesPattern.exec(responseText)) !== null) {
@@ -435,3 +432,53 @@ export const analyzeSymptomsPattern = (foundSymptomIds: string[]) => {
     matchCounts: matched
   };
 };
+
+/**
+ * Validates AI response to ensure it only mentions symptoms the patient actually reported.
+ * Detects when AI is hallucinating or inventing symptoms.
+ * 
+ * @param aiResponse - The AI's response text
+ * @param reportedSymptomIds - Array of symptom IDs the patient actually reported
+ * @returns Object with validation result and any hallucinated symptoms found
+ */
+export const validateAIResponse = (
+  aiResponse: string,
+  reportedSymptomIds: string[]
+): { isValid: boolean; hallucinatedSymptoms: string[] } => {
+  const reportedLabels = reportedSymptomIds
+    .map(id => SYMPTOMS_DB.find(s => s.id === id)?.label)
+    .filter(Boolean)
+    .map(label => label!.toLowerCase());
+
+  const hallucinatedSymptoms: string[] = [];
+
+  // Check if AI mentions any symptoms not in the reported list
+  SYMPTOMS_DB.forEach(symptom => {
+    // Check if symptom is mentioned in the response
+    const symptomMentioned = symptom.label.split(' ').some(word => 
+      new RegExp(`\\b${word.toLowerCase()}\\b`, 'i').test(aiResponse)
+    ) || 
+    symptom.keywords.some(keyword => 
+      new RegExp(`\\b${keyword.toLowerCase()}\\b`, 'i').test(aiResponse)
+    );
+
+    // If mentioned but not reported, it's hallucinated
+    if (symptomMentioned && !reportedLabels.includes(symptom.label.toLowerCase())) {
+      // Allow some clinical terms that aren't direct symptoms (like "presentation", "pattern")
+      const clinicalTerms = ['presentation', 'pattern', 'history', 'condition', 'infection', 'viral', 'bacterial'];
+      const isClinicicalTerm = clinicalTerms.some(term => 
+        new RegExp(`\\b${term}\\b`, 'i').test(symptom.label)
+      );
+      
+      if (!isClinicicalTerm) {
+        hallucinatedSymptoms.push(symptom.label);
+      }
+    }
+  });
+
+  return {
+    isValid: hallucinatedSymptoms.length === 0,
+    hallucinatedSymptoms
+  };
+};
+

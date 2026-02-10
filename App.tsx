@@ -979,7 +979,7 @@ Focus on deepening understanding of what they actually reported.`;
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder="Describe symptoms..."
-                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-white text-[16px] py-[10px] px-1 resize-none max-h-32 min-h-[44px] placeholder-slate-400 leading-6"
+                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-[16px] py-[10px] px-1 resize-none max-h-32 min-h-[44px] placeholder-slate-400 leading-6"
               />
 
               <button onClick={handleSend} disabled={(!input.trim() && !selectedImage) || isTyping} className={`h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 ${(!input.trim() && !selectedImage) || isTyping ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-teal-600 text-white hover:bg-teal-700 hover:shadow-lg hover:shadow-teal-500/40 hover:scale-110 shadow-md shadow-teal-500/20'}`}>

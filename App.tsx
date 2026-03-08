@@ -999,7 +999,7 @@ Focus on deepening understanding of what they actually reported.`;
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={isTyping}
                 className="h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 text-slate-600 hover:bg-slate-200 hover:text-teal-600 active:scale-90"
                 title="Upload medical image"
               >
@@ -1062,7 +1062,7 @@ Focus on deepening understanding of what they actually reported.`;
                     recognitionRef.current?.start();
                   }
                 }}
-                disabled={isLoading}
+                disabled={isTyping}
                 className={`h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 ${isRecording ? 'bg-red-500 text-white shadow-lg shadow-red-500/40' : 'text-slate-600 hover:bg-slate-200 hover:text-teal-600'}`}
                 title={isRecording ? 'Stop recording' : 'Start voice input'}
               >

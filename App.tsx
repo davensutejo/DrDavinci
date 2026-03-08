@@ -170,7 +170,8 @@ const App: React.FC = () => {
   
   const currentApiKeyIndexRef = useRef<number>(0); // Track which Gemini key we're using
   const exhaustedKeysRef = useRef<Set<number>>(new Set()); // Track exhausted Gemini keys
-  const useOpenRouterRef = useRef<boolean>(false); // Track if using OpenRouter fallback
+  const useOpenRouterRef = useRef<boolean>(true); // PRIMARY API: OpenRouter is main service
+  const openRouterFailedRef = useRef<boolean>(false); // Track if OpenRouter has failed
   const conversationStateRef = useRef<ConversationState>({
     questionCount: 0,
     maxQuestions: 3,
@@ -208,33 +209,35 @@ const App: React.FC = () => {
 
   // Get next available API key (prioritize OpenRouter, fallback to Gemini keys)
   const getNextApiKey = useCallback((): [string, number, boolean] => {
-    // PRIORITY 1: OpenRouter (check first if available and not previously failed)
-    if (process.env.OPENROUTER_API_KEY && !useOpenRouterRef.current) {
+    // PRIMARY: Always use OpenRouter first if available and not failed
+    if (process.env.OPENROUTER_API_KEY && !openRouterFailedRef.current) {
       useOpenRouterRef.current = true;
-      return [process.env.OPENROUTER_API_KEY, -1, true]; // -1 indicates OpenRouter
+      return [process.env.OPENROUTER_API_KEY, -1, true];
     }
     
-    // PRIORITY 2: Rotate through Gemini keys
+    // FALLBACK: OpenRouter failed, cycle through Gemini keys
     for (let i = 0; i < GEMINI_API_KEYS.length; i++) {
       const nextIndex = (currentApiKeyIndexRef.current + i) % GEMINI_API_KEYS.length;
       if (!exhaustedKeysRef.current.has(nextIndex)) {
         currentApiKeyIndexRef.current = nextIndex;
+        useOpenRouterRef.current = false;
         return [GEMINI_API_KEYS[nextIndex], nextIndex + 1, false];
       }
     }
     
-    // All keys exhausted, reset and try again from OpenRouter
-    if (process.env.OPENROUTER_API_KEY) {
+    // All Gemini keys exhausted, try OpenRouter again if it was previously failed
+    if (process.env.OPENROUTER_API_KEY && openRouterFailedRef.current) {
       exhaustedKeysRef.current.clear();
       currentApiKeyIndexRef.current = 0;
-      useOpenRouterRef.current = false;
-      return getNextApiKey(); // Recursive call to start fresh with OpenRouter
+      openRouterFailedRef.current = false; // Reset OpenRouter to try again
+      useOpenRouterRef.current = true;
+      return [process.env.OPENROUTER_API_KEY, -1, true];
     }
     
-    // Last resort: reset Gemini keys and try again
+    // Last resort: reset and cycle Gemini again
     exhaustedKeysRef.current.clear();
-    useOpenRouterRef.current = false;
     currentApiKeyIndexRef.current = 0;
+    useOpenRouterRef.current = false;
     return [GEMINI_API_KEYS[0], 1, false];
   }, [GEMINI_API_KEYS]);
 
@@ -753,45 +756,55 @@ Focus on deepening understanding of what they actually reported.`;
                          errorMessage.includes('RESOURCE_EXHAUSTED') ||
                          errorMessage.includes('exceeded');
       
-      // If OpenRouter failed and we already fell back to Gemini in the try block,
-      // don't try to fall back again
-      if (isRateLimit && !useOpenRouterRef.current && !openRouterFailed) {
-        // Mark current key as exhausted
-        const keyIndex = currentApiKeyIndexRef.current;
-        exhaustedKeysRef.current.add(keyIndex);
-        const [nextKey, nextKeyNumber, isOpenRouter] = getNextApiKey();
+      if (useOpenRouterRef.current && isRateLimit) {
+        // Primary API (OpenRouter) hit rate limit, mark as failed and fallback to Gemini
+        openRouterFailedRef.current = true;
+        chatRef.current = null;
         
-        if (isOpenRouter) {
-          // Switch to OpenRouter
-          chatRef.current = null; // Reset chat
-          
-          setActiveSession(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API quota limit reached. Switching to backup service. Please try your request again.`, timestamp: new Date() }]
-          } : null);
-        } else if (nextKeyNumber !== keyIndex + 1) {
-          // Rotated to a different API key
-          chatRef.current = null; // Reset chat to reinitialize with new key
-          
-          setActiveSession(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `API quota limit reached. Switched to backup service. Please try again.`, timestamp: new Date() }]
-          } : null);
-        } else {
-          // All exhausted and no OpenRouter
-          setActiveSession(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `API quota limit reached. Please try again later or contact support.`, timestamp: new Date() }]
-          } : null);
-        }
-      } else if (useOpenRouterRef.current) {
-        // OpenRouter error (and we couldn't fall back within the block)
         setActiveSession(prev => prev ? {
           ...prev,
-          messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `Backup service error. Attempting to use primary service. Please try again.`, timestamp: new Date() }]
+          messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Primary service rate limited. Switching to backup API. Please try again.`, timestamp: new Date() }]
         } : null);
+      } else if (useOpenRouterRef.current) {
+        // OpenRouter error (not rate limit)
+        openRouterFailedRef.current = true;
+        chatRef.current = null;
+        
+        setActiveSession(prev => prev ? {
+          ...prev,
+          messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Primary service unavailable. Trying backup. Please try again.`, timestamp: new Date() }]
+        } : null);
+      } else if (isRateLimit && !openRouterFailed) {
+        // Gemini API hit rate limit, rotate key
+        const keyIndex = currentApiKeyIndexRef.current;
+        exhaustedKeysRef.current.add(keyIndex);
+        const [nextKey, nextKeyNumber, isNextOpenRouter] = getNextApiKey();
+        
+        if (isNextOpenRouter) {
+          // Fallback to OpenRouter
+          chatRef.current = null;
+          
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Backup API quota exceeded. Trying primary service again. Please try again.`, timestamp: new Date() }]
+          } : null);
+        } else if (nextKeyNumber !== keyIndex + 1) {
+          // Rotated to a different Gemini key
+          chatRef.current = null;
+          
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'info-' + Date.now(), role: 'bot', content: `Backup API key quota exceeded. Using another backup key. Please try again.`, timestamp: new Date() }]
+          } : null);
+        } else {
+          // All exhausted
+          setActiveSession(prev => prev ? {
+            ...prev,
+            messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `All services have reached their rate limits. Please try again later.`, timestamp: new Date() }]
+          } : null);
+        }
       } else {
-        // Not a rate limit error
+        // General error
         setActiveSession(prev => prev ? {
           ...prev,
           messages: [...prev.messages, { id: 'err-' + Date.now(), role: 'bot', content: `An error occurred while connecting to the medical engine. Please try again.`, timestamp: new Date() }]

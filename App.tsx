@@ -972,7 +972,105 @@ Focus on deepening understanding of what they actually reported.`;
 
         <footer className="flex-shrink-0 bg-white border-t border-slate-200 z-50">
           <div className="max-w-4xl mx-auto w-full p-2 md:p-4">
+            {selectedImage && (
+              <div className="mb-3 flex items-end gap-3">
+                <div className="flex-1 flex gap-2 items-center bg-teal-50 border border-teal-200 rounded-lg p-2">
+                  <img src={selectedImage.preview} alt="Selected" className="w-12 h-12 object-cover rounded" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-teal-900 truncate">Medical image attached</p>
+                    <p className="text-xs text-teal-700">{Math.round(selectedImage.base64.length / 1024)} KB</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedImage(null)}
+                  className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-medium transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
             <div className="bg-slate-50 border border-slate-200 rounded-[28px] md:rounded-[36px] p-1.5 shadow-sm flex items-center gap-1 md:gap-2 ring-1 ring-black/5 focus-within:ring-4 focus-within:ring-teal-500/10 transition-all duration-300">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleImageUpload} 
+                accept="image/*" 
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 text-slate-600 hover:bg-slate-200 hover:text-teal-600 active:scale-90"
+                title="Upload medical image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!recognitionRef.current) {
+                    try {
+                      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                      if (!SpeechRecognition) {
+                        alert('Speech recognition is not supported in your browser. Please use Chrome, Edge, or Safari.');
+                        return;
+                      }
+                      const recognition = new SpeechRecognition();
+                      recognition.continuous = true;
+                      recognition.interimResults = true;
+                      recognition.lang = 'en-US';
+                      recognitionRef.current = recognition;
+                      
+                      recognition.onstart = () => setIsRecording(true);
+                      recognition.onend = () => setIsRecording(false);
+                      recognition.onerror = (event: any) => {
+                        setIsRecording(false);
+                        if (event.error === 'not-allowed') {
+                          alert('Microphone access denied. Please allow microphone access in your browser settings.');
+                        }
+                      };
+                      recognition.onresult = (event: any) => {
+                        let interimTranscript = '';
+                        let newFinalTranscript = '';
+                        const startIndex = Math.max(event.resultIndex, lastProcessedIndexRef.current);
+                        for (let i = startIndex; i < event.results.length; i++) {
+                          const transcript = event.results[i][0].transcript;
+                          if (event.results[i].isFinal) {
+                            newFinalTranscript += transcript + ' ';
+                          } else {
+                            interimTranscript += transcript;
+                          }
+                        }
+                        if (newFinalTranscript) {
+                          finalTranscriptRef.current += newFinalTranscript;
+                          lastProcessedIndexRef.current = event.results.length;
+                        }
+                        setInput(finalTranscriptRef.current + interimTranscript);
+                      };
+                    } catch (err) {
+                      alert('Error initializing speech recognition');
+                    }
+                  }
+                  if (isRecording) {
+                    recognitionRef.current?.stop();
+                    setIsRecording(false);
+                  } else {
+                    finalTranscriptRef.current = input;
+                    lastProcessedIndexRef.current = 0;
+                    recognitionRef.current?.start();
+                  }
+                }}
+                disabled={isLoading}
+                className={`h-11 w-11 flex items-center justify-center rounded-full transition-all duration-300 active:scale-90 ${isRecording ? 'bg-red-500 text-white shadow-lg shadow-red-500/40' : 'text-slate-600 hover:bg-slate-200 hover:text-teal-600'}`}
+                title={isRecording ? 'Stop recording' : 'Start voice input'}
+              >
+                <svg className={`w-5 h-5 ${isRecording ? 'animate-pulse' : ''}`} fill={isRecording ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4" />
+                </svg>
+              </button>
+
               <textarea
                 rows={1}
                 value={input}

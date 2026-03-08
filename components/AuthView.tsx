@@ -199,7 +199,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 disabled={isLoading}
                 onChange={e => {
                   setName(e.target.value);
-                  if (validationErrors.name) setValidationErrors({ ...validationErrors, name: undefined });
+                  setValidationErrors({});
                 }}
                 className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none ${validationErrors.name ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'}`}
                 placeholder="Dr. Jane Smith"
@@ -217,7 +217,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
               disabled={isLoading}
               onChange={e => {
                 setUsername(e.target.value);
-                if (validationErrors.username) setValidationErrors({ ...validationErrors, username: undefined });
+                setValidationErrors({});
               }}
               className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none ${validationErrors.username ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'}`}
               placeholder="medical_id_2024"
@@ -235,7 +235,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 disabled={isLoading}
                 onChange={e => {
                   setEmail(e.target.value);
-                  if (validationErrors.email) setValidationErrors({ ...validationErrors, email: undefined });
+                  setValidationErrors({});
                 }}
                 className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none ${validationErrors.email ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'}`}
                 placeholder="you@example.com"
@@ -254,7 +254,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                 disabled={isLoading}
                 onChange={e => {
                   setPassword(e.target.value);
-                  if (validationErrors.password) setValidationErrors({ ...validationErrors, password: undefined });
+                  setValidationErrors({});
                 }}
                 className={`w-full bg-slate-50 border rounded-xl px-4 py-3 pr-12 text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none ${validationErrors.password ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'}`}
                 placeholder="••••••••"
@@ -308,12 +308,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLogin }) => {
                   disabled={isLoading}
                   onChange={e => {
                     setConfirmPassword(e.target.value);
-                    // Real-time validation feedback
-                    if (!validationErrors.confirmPassword) return;
-                    
-                    if (e.target.value && password && e.target.value === password) {
-                      setValidationErrors({ ...validationErrors, confirmPassword: undefined });
-                    }
+                    setValidationErrors({});
                   }}
                   className={`w-full bg-slate-50 border rounded-xl px-4 py-3 pr-12 text-sm focus:ring-2 focus:ring-teal-500/50 focus:border-teal-500 transition-all outline-none ${validationErrors.confirmPassword ? 'border-red-300 focus:ring-red-500/50' : 'border-slate-200 hover:border-slate-300'}`}
                   placeholder="••••••••"

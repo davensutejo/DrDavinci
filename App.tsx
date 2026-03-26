@@ -246,30 +246,45 @@ const App: React.FC = () => {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error('OpenRouter API key not configured');
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'X-Title': 'Dr-Davinci-Medical',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-preview-09-2025',
-        messages: [
-          { role: 'system', content: systemInstruction },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.5,
-        stream: true,
-      })
-    });
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'X-Title': 'Dr-Davinci-Medical',
+          'HTTP-Referer': window.location.origin,
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0.5,
+          stream: true,
+          max_tokens: 2000,
+        })
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(JSON.stringify(error));
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = JSON.stringify(errorData);
+          console.error('[OpenRouter Error]', errorMessage);
+        } catch {
+          const text = await response.text();
+          console.error('[OpenRouter Error Text]', text);
+        }
+        throw new Error(`OpenRouter API error: ${errorMessage}`);
+      }
+
+      return response;
+    } catch (error: any) {
+      console.error('[OpenRouter Fetch Error]', error?.message || error);
+      throw error;
     }
-
-    return response;
   }, []);
 
   // Handle New Chat creation
